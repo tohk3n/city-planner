@@ -1,0 +1,11 @@
+import { defineConfig } from 'vite'
+import { viteSingleFile } from 'vite-plugin-singlefile'
+
+export default defineConfig({
+  base: '/city-planner',
+  plugins: [viteSingleFile()],
+  build: {
+    target: 'esnext',
+    outDir: 'dist'
+  }
+})
