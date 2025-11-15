@@ -159,8 +159,6 @@ export function initRenderers() {
   console.log('[State] Renderers initialized');
 }
 
-// Backwards compatibility shim - provides old interface for unmigrated code
-// TODO: Remove once all code migrated to entity system
 Object.defineProperty(AppState, 'largeTiles', {
   get() {
     if (!this.entities) return new Map();
