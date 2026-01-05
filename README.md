@@ -40,19 +40,19 @@ A hex-based grid planning tool for designing settlements in the game Bitcraft.
 
 ```
 bitcraft-planner/
-â”œâ”€â”€ index.html              # Main HTML file with UI
-â”œâ”€â”€ README.txt              # This file
-â””â”€â”€ js/
-    â”œâ”€â”€ config.js           # Constants and building data
-    â”œâ”€â”€ hex-math.js         # Hex coordinate system
-    â”œâ”€â”€ tile-system.js      # Large tile logic
-    â”œâ”€â”€ stamps.js           # Building stamp system
-    â”œâ”€â”€ state.js            # Application state
-    â”œâ”€â”€ rendering.js        # SVG rendering
-    â”œâ”€â”€ painting.js         # Paint operations
-    â”œâ”€â”€ ui.js               # UI event handlers
-    â”œâ”€â”€ file-ops.js         # Save/load/reset
-    â””â”€â”€ main.js             # Initialization
+* index.html              # Main HTML file with UI
+* README.txt              # This file
+* js/
+    * config.js           # Constants and building data
+    * hex-math.js         # Hex coordinate system
+    * tile-system.js      # Large tile logic
+    * stamps.js           # Building stamp system
+    * state.js            # Application state
+    * rendering.js        # SVG rendering
+    * painting.js         # Paint operations
+    * ui.js               # UI event handlers
+    * file-ops.js         # Save/load/reset
+    * main.js             # Initialization
 ```
 
 ## Browser Compatibility
