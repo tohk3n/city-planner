@@ -1,7 +1,7 @@
 // Camera controls for ortho and perspective modes.
 // Owns middle-drag (pan), right-drag (orbit), wheel (zoom),
 // and keyboard (WASD pan, QE orbit, RF vertical).
-// Left button is NOT ours — InteractionManager handles hex picking.
+// Left button is NOT ours -- InteractionManager handles hex picking.
 //
 // Needs update() called every frame for keyboard and momentum.
 
@@ -27,7 +27,7 @@ const DEFAULTS = {
   maxZoom: 20,
   minRadius: 100,
   maxRadius: 5000,
-  // Phi limits — don't let the camera flip upside down or go underground
+  // Phi limits -- don't let the camera flip upside down or go underground
   minPhi: 0.1,
   maxPhi: Math.PI / 2 - 0.05,
 };
@@ -235,7 +235,7 @@ export default class CameraController {
       const elH = this._el.clientHeight;
 
       cam.position.x -= dx * (viewW / elW);
-      cam.position.z += dy * (viewH / elH);
+      cam.position.z -= dy * (viewH / elH);
 
       // Store velocity for momentum
       this._panVel.x = -dx * DEFAULTS.panSpeed;
@@ -294,7 +294,7 @@ export default class CameraController {
       }
     }
 
-    // Pan momentum (perspective only — ortho pan is direct position manipulation)
+    // Pan momentum (perspective only -- ortho pan is direct position manipulation)
     if (!this._isPanning && this.sm.mode === 'perspective') {
       if (Math.abs(this._panVel.x) > min || Math.abs(this._panVel.y) > min) {
         const right = new THREE.Vector3();

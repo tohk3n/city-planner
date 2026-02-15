@@ -1,10 +1,10 @@
 // Scene infrastructure: WebGL renderer, CSS2D label renderer, dual cameras,
 // and lighting. Owns the rendering pipeline but not the content or the
-// animation loop — the caller decides when to call render().
+// animation loop -- the caller decides when to call render().
 //
 // Two camera modes:
-//   'ortho'       — top-down flat view (the "2D" mode)
-//   'perspective'  — orbitable 3D view
+//   'ortho'       -- top-down flat view (the "2D" mode)
+//   'perspective'  -- orbitable 3D view
 // Both look at the same scene. Switching is just swapping which camera
 // gets passed to the renderers.
 
@@ -120,7 +120,7 @@ export default class SceneManager {
   dispose() {
     window.removeEventListener('resize', this.resize);
     this.renderer.dispose();
-    // CSS2DRenderer has no dispose — just remove its DOM element
+    // CSS2DRenderer has no dispose -- just remove its DOM element
     this.labelRenderer.domElement.remove();
   }
 
@@ -130,7 +130,7 @@ export default class SceneManager {
     // WebGL
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    // Shadows off by default — they cost 35+ FPS on large grids.
+    // Shadows off by default -- they cost 35+ FPS on large grids.
     // TerrainRenderer or caller can enable per-light if needed.
     this.renderer.shadowMap.enabled = false;
     this.container.appendChild(this.renderer.domElement);
@@ -149,20 +149,24 @@ export default class SceneManager {
     const { fov, near, far, distance, height } = PERSPECTIVE_DEFAULTS;
     this._aspect = this.container.clientWidth / this.container.clientHeight || 1;
 
-    // Perspective — classic orbitable 3D camera
+    // Perspective -- classic orbitable 3D camera
     this._persp = new THREE.PerspectiveCamera(fov, this._aspect, near, far);
     this._persp.position.set(0, height, distance);
     this._persp.lookAt(0, 0, 0);
 
-    // Orthographic — top-down "2D" view
+    // Orthographic -- top-down "2D" view
     // Frustum updated by _updateOrthoFrustum whenever zoom or aspect changes.
     this._ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, far);
     this._ortho.position.set(0, far / 2, 0);
+    // Up = -Z so screen-up maps to decreasing r (north on the hex map).
+    // Without this, lookAt from +Y with default up=(0,1,0) is degenerate
+    // and THREE resolves it unpredictably.
+    this._ortho.up.set(0, 0, -1);
     this._ortho.lookAt(0, 0, 0);
     // Rotate so +q (axial east) points screen-right and +r (axial SE) points screen-down-right.
     // Default lookAt(0,0,0) from above gives us -Z = up on screen. We want the hex grid's
     // natural orientation, which is already handled by axialToPixel mapping x→screen-x, y→screen-z.
-    // No extra rotation needed — the ortho camera looks down Y and the grid lives on the XZ plane.
+    // No extra rotation needed -- the ortho camera looks down Y and the grid lives on the XZ plane.
     this._updateOrthoFrustum();
   }
 
@@ -178,15 +182,15 @@ export default class SceneManager {
   }
 
   _initLights() {
-    // Ambient — base so nothing is pure black
+    // Ambient -- base so nothing is pure black
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
-    // Directional — primary light, no shadows (see note in _initRenderers)
+    // Directional -- primary light, no shadows (see note in _initRenderers)
     const sun = new THREE.DirectionalLight(0xffffff, 0.8);
     sun.position.set(500, 800, 300);
     this.scene.add(sun);
 
-    // Hemisphere — subtle sky/ground gradient for depth cues
+    // Hemisphere -- subtle sky/ground gradient for depth cues
     this.scene.add(new THREE.HemisphereLight(0x87ceeb, 0x4a3a2a, 0.3));
   }
 }

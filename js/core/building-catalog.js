@@ -1,6 +1,6 @@
 // Canonical building catalog loaded from game data.
 //
-// The JSON comes from the Bitcraft API scraper — every building with
+// The JSON comes from the Bitcraft API scraper -- every building with
 // its hitbox, perimeter, and walkable footprints in axial [q,r] coords.
 // Multiple tiers of the same building (Rough→Magnificent) usually share
 // the same shape, so we deduplicate by baseName and index unique shapes.
@@ -21,7 +21,7 @@ export class Building {
     this.lightRadius = raw.lr || 0;
     this.stats = raw.s || null;
 
-    // Footprints as {q, r}[] — parsed once at load time
+    // Footprints as {q, r}[] -- parsed once at load time
     this.hitbox = toCoords(raw.h);
     this.perimeter = toCoords(raw.p);
     this.walkable = toCoords(raw.w);
@@ -43,7 +43,8 @@ export default class BuildingCatalog {
     let data = typeof json === 'string' ? JSON.parse(json) : json;
     // Vite JSON imports wrap in { default: ... }
     if (data.default) data = data.default;
-    const list = data.buildings || (Array.isArray(data) ? data : []);
+    // Compact format uses 'b', full format uses 'buildings'
+    const list = data.buildings || data.b || (Array.isArray(data) ? data : []);
 
     this.buildings.clear();
     this.byBaseName.clear();
@@ -74,7 +75,7 @@ export default class BuildingCatalog {
     return this.byBaseName.get(baseName) || [];
   }
 
-  // Unique base names per category — the "pick a building" list for the UI.
+  // Unique base names per category -- the "pick a building" list for the UI.
   // Returns [{baseName, category, size, building}] with one entry per shape.
   getUniqueBuildings() {
     const seen = new Set();
@@ -98,7 +99,7 @@ export default class BuildingCatalog {
     });
   }
 
-  // Hitbox coords rotated by N×60° CW. Cached because the same building
+  // Hitbox coords rotated by N—60° CW. Cached because the same building
   // at the same rotation gets requested many times (hover preview, placement).
   getRotatedHitbox(id, rotation) {
     const steps = ((rotation % 6) + 6) % 6;

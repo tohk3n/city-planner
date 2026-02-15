@@ -1,56 +1,70 @@
 // Triangular tile system for Bitcraft's 7-hex terraform clusters.
 //
-// The game world is perfectly tiled by 7-hex clusters (center + 6 neighbors).
-// 3/4 of clusters are terraformable TILES; 1/4 are SPACER clusters that
-// create the triangular visual pattern between tile groups.
+// GEOMETRY (verified by hand-painting hex coordinates in HexMapper):
 //
-// The tiling is a lattice with basis vectors v1=(2,1) and v2=(-1,3) in axial
-// coordinates. These have hex-distance 3 and are 60° apart — the minimum
-// non-overlapping packing of radius-1 hex clusters.
+// The game world tiles perfectly into 7-hex clusters (center + 6 neighbors).
+// Each cluster center sits on a rectangular lattice with basis vectors (3,0)
+// and (0,3), offset by (1,0):
 //
-// Spacer clusters occur at lattice positions where both indices are odd.
-// This produces: no two spacers adjacent, each spacer ringed by 6 tiles,
-// and groups of 3 tiles forming equilateral "super-triangles" with a spacer
-// at the center.
+//   center_q = 1 + 3n
+//   center_r = 3m
 //
-// Lookup is O(1) — no Maps needed to find which tile owns a hex. The lattice
-// inverse (simple division by 7 + round) is mathematically guaranteed to
-// produce the correct result because the max fractional error (3/7 ≈ 0.43)
-// is below the 0.5 rounding threshold.
+// This means ALL cluster centers have q%3 == 1 and r%3 == 0.
+//
+// Every hex in the world falls into one of 9 residue classes (q%3, r%3).
+// 7 of those classes belong to tile clusters, 2 are spacer hexes:
+//
+//   TILE residues:  (0,0) (0,1) (1,0) (1,1) (1,2) (2,0) (2,2)
+//   SPACER residues: (0,2) (2,1)
+//
+// Spacer hexes form their own 7-hex clusters too, but they're not
+// terraformable -- they're the visual gaps between tile groups.
+// Groups of 3 tile clusters form equilateral "super-triangles" with
+// spacer clusters at the 60-degree gaps between them.
+//
+// The spacer test is pure mod arithmetic -- no lattice inverse needed:
+//   isSpacer(q, r) = (q%3==0 && r%3==2) || (q%3==2 && r%3==1)
+//
+// Lookup is O(1). No Maps needed to find which tile owns a hex.
 
-import { hexKey, getNeighbors, axialDistance } from './hex-math.js';
+import { hexKey, getNeighbors } from './hex-math.js';
 
-// Lattice basis vectors
-const V1_Q = 2, V1_R = 1;   // hex distance 3
-const V2_Q = -1, V2_R = 3;  // hex distance 3
+// --- Pure lattice math (stateless) ---
 
-// --- Pure lattice math (stateless, no allocation where avoidable) -----------
-
+// Lattice index (n, m) -> cluster center in axial coords.
 export function latticeToAxial(n, m) {
-  return { q: 2 * n - m, r: n + 3 * m };
+  return { q: 1 + 3 * n, r: 3 * m };
 }
 
+// Axial coords -> lattice index. Only meaningful for cluster centers;
+// for arbitrary hexes, use hexToClusterCenter() instead.
 export function axialToLatticeIndex(q, r) {
   return {
-    n: Math.round((3 * q + r) / 7),
-    m: Math.round((2 * r - q) / 7),
+    n: Math.round((q - 1) / 3),
+    m: Math.round(r / 3),
   };
 }
 
+// Is this hex a spacer? Pure mod-3 residue test.
+// 2 of 9 residue classes are spacers; 7 are tile hexes.
+export function isSpacerHex(q, r) {
+  const qm = ((q % 3) + 3) % 3;
+  const rm = ((r % 3) + 3) % 3;
+  return (qm === 0 && rm === 2) || (qm === 2 && rm === 1);
+}
+
+// Is this lattice position a spacer cluster?
+// (Both n and m must be checked after converting to axial)
 export function isSpacerLattice(n, m) {
-  return (n % 2 !== 0) && (m % 2 !== 0);
+  const { q, r } = latticeToAxial(n, m);
+  return isSpacerHex(q, r);
 }
 
 // Given any hex, find the axial center of the cluster it belongs to.
+// Works by rounding to the nearest lattice point.
 export function hexToClusterCenter(q, r) {
   const { n, m } = axialToLatticeIndex(q, r);
   return latticeToAxial(n, m);
-}
-
-// Is this hex part of a spacer cluster?
-export function isSpacerHex(q, r) {
-  const { n, m } = axialToLatticeIndex(q, r);
-  return isSpacerLattice(n, m);
 }
 
 // Get all 7 hexes of the cluster that owns hex (q,r).
@@ -61,7 +75,7 @@ export function getClusterHexes(q, r) {
 
 // Lattice key for Map storage of tile state.
 export function tileKey(n, m) {
-  return `${n},${m}`;
+  return n + ',' + m;
 }
 
 export function parseTileKey(key) {
@@ -72,7 +86,7 @@ export function parseTileKey(key) {
   };
 }
 
-// --- Tile state management --------------------------------------------------
+// --- Tile state management ---
 
 export class Tile {
   constructor(n, m) {
@@ -87,8 +101,8 @@ export class Tile {
 
 export default class TileSystem {
   constructor() {
-    this.tiles = new Map();     // tileKey → Tile (terraformable tiles only)
-    this.hexToTile = new Map(); // hexKey → Tile (reverse lookup for all tile hexes)
+    this.tiles = new Map();     // tileKey -> Tile (terraformable tiles only)
+    this.hexToTile = new Map(); // hexKey -> Tile (reverse lookup for all tile hexes)
     this.origin = { q: 0, r: 0 };
   }
 
@@ -98,26 +112,20 @@ export default class TileSystem {
     this.tiles.clear();
     this.hexToTile.clear();
 
-    // Convert bound corners to lattice range with padding
-    const corners = [
-      axialToLatticeIndex(bounds.minQ, bounds.minR),
-      axialToLatticeIndex(bounds.maxQ, bounds.minR),
-      axialToLatticeIndex(bounds.minQ, bounds.maxR),
-      axialToLatticeIndex(bounds.maxQ, bounds.maxR),
-    ];
-    const nMin = Math.min(...corners.map(c => c.n)) - 1;
-    const nMax = Math.max(...corners.map(c => c.n)) + 1;
-    const mMin = Math.min(...corners.map(c => c.m)) - 1;
-    const mMax = Math.max(...corners.map(c => c.m)) + 1;
+    // Convert bounds to lattice range with padding
+    const nMin = Math.floor((bounds.minQ - 1) / 3) - 1;
+    const nMax = Math.ceil((bounds.maxQ - 1) / 3) + 1;
+    const mMin = Math.floor(bounds.minR / 3) - 1;
+    const mMax = Math.ceil(bounds.maxR / 3) + 1;
 
     for (let n = nMin; n <= nMax; n++) {
       for (let m = mMin; m <= mMax; m++) {
-        if (isSpacerLattice(n, m)) continue;
-
         const center = latticeToAxial(n, m);
 
-        // Only include tiles whose center is within or near bounds.
-        // A cluster can overlap the bounds even if its center is 1 hex outside.
+        // Skip if this lattice point produces a spacer cluster
+        if (isSpacerHex(center.q, center.r)) continue;
+
+        // Only include tiles whose center is within or near bounds
         if (center.q < bounds.minQ - 1 || center.q > bounds.maxQ + 1) continue;
         if (center.r < bounds.minR - 1 || center.r > bounds.maxR + 1) continue;
 
@@ -135,11 +143,11 @@ export default class TileSystem {
     return this;
   }
 
-  // O(1) lookup via math — doesn't need generate() to have been called.
-  // Returns the Tile if it exists in the generated set, null otherwise.
+  // O(1) lookup: find the tile at this hex's cluster center.
+  // Returns null for spacer hexes or hexes outside the generated set.
   getTileAt(q, r) {
+    if (isSpacerHex(q, r)) return null;
     const { n, m } = axialToLatticeIndex(q, r);
-    if (isSpacerLattice(n, m)) return null;
     return this.tiles.get(tileKey(n, m)) || null;
   }
 
@@ -157,31 +165,12 @@ export default class TileSystem {
     return true;
   }
 
-  // Get all spacer hex keys within bounds (for rendering them differently).
+  // Get all spacer hex coords within bounds.
   getSpacerHexes(bounds) {
     const result = [];
-    const corners = [
-      axialToLatticeIndex(bounds.minQ, bounds.minR),
-      axialToLatticeIndex(bounds.maxQ, bounds.minR),
-      axialToLatticeIndex(bounds.minQ, bounds.maxR),
-      axialToLatticeIndex(bounds.maxQ, bounds.maxR),
-    ];
-    const nMin = Math.min(...corners.map(c => c.n)) - 1;
-    const nMax = Math.max(...corners.map(c => c.n)) + 1;
-    const mMin = Math.min(...corners.map(c => c.m)) - 1;
-    const mMax = Math.max(...corners.map(c => c.m)) + 1;
-
-    for (let n = nMin; n <= nMax; n++) {
-      for (let m = mMin; m <= mMax; m++) {
-        if (!isSpacerLattice(n, m)) continue;
-        const center = latticeToAxial(n, m);
-        const hexes = [center, ...getNeighbors(center.q, center.r)];
-        for (const h of hexes) {
-          if (h.q >= bounds.minQ && h.q <= bounds.maxQ &&
-              h.r >= bounds.minR && h.r <= bounds.maxR) {
-            result.push(h);
-          }
-        }
+    for (let q = bounds.minQ; q <= bounds.maxQ; q++) {
+      for (let r = bounds.minR; r <= bounds.maxR; r++) {
+        if (isSpacerHex(q, r)) result.push({ q, r });
       }
     }
     return result;

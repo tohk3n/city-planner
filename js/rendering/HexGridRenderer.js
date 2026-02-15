@@ -6,7 +6,7 @@
 // dirty-hex updates. The grid mutates, we react.
 //
 // Hex geometry lives on the XZ plane at y=0. Terrain extrusion
-// is TerrainRenderer's job — this just does the flat painted grid.
+// is TerrainRenderer's job -- this just does the flat painted grid.
 
 import * as THREE from 'three';
 import { axialToPixel, hexKey, parseHexKey } from '../core/hex-math.js';
@@ -26,16 +26,18 @@ export default class HexGridRenderer {
     // Shared geometry for all flat hexes
     this._geometry = createFlatHexGeometry(hexSize);
 
-    // color string → ColorBatch
+    // color string â†’ ColorBatch
     this._batches = new Map();
 
-    // hexKey → { color, slot } so we know where each hex lives
+    // hexKey â†’ { color, slot } so we know where each hex lives
     this._hexIndex = new Map();
 
     // World offset to center the grid at origin.
     // Set by rebuild() from grid bounds.
     this._offsetX = 0;
     this._offsetZ = 0;
+
+    this._visible = true;
   }
 
   // -- Public API --
@@ -81,7 +83,7 @@ export default class HexGridRenderer {
       const existing = this._hexIndex.get(key);
 
       if (existing && existing.color === newColor) {
-        // Color unchanged — position can't change for a hex, so nothing to do.
+        // Color unchanged -- position can't change for a hex, so nothing to do.
         continue;
       }
 
@@ -104,6 +106,16 @@ export default class HexGridRenderer {
         batch.mesh.dispose();
         this._batches.delete(color);
       }
+    }
+  }
+
+  // Hide/show all batches without destroying them.
+  // Used when switching to 3D terrain so the flat grid
+  // doesn't z-fight with extruded meshes.
+  setVisible(visible) {
+    this._visible = visible;
+    for (const batch of this._batches.values()) {
+      batch.mesh.visible = visible;
     }
   }
 
@@ -132,7 +144,7 @@ export default class HexGridRenderer {
       this._offsetX = (minPx.x + maxPx.x) / 2;
       this._offsetZ = (minPx.y + maxPx.y) / 2;
     } else {
-      // Hex bounds — center is the center hex's pixel position
+      // Hex bounds -- center is the center hex's pixel position
       const center = axialToPixel(b.cq || 0, b.cr || 0, this.hexSize);
       this._offsetX = center.x;
       this._offsetZ = center.y;
@@ -144,7 +156,8 @@ export default class HexGridRenderer {
     const material = new THREE.MeshBasicMaterial({ color });
     const mesh = new THREE.InstancedMesh(this._geometry, material, capacity);
     mesh.count = 0;
-    mesh.frustumCulled = false; // We manage visibility ourselves
+    mesh.frustumCulled = false;
+    mesh.visible = this._visible;
 
     this.scene.add(mesh);
 
@@ -153,7 +166,7 @@ export default class HexGridRenderer {
       material,
       capacity,
       count: 0,
-      // Bidirectional index: slot↔hexKey
+      // Bidirectional index: slotâ†’hexKey
       keyToSlot: new Map(),
       slotToKey: new Map(),
     };
@@ -226,6 +239,7 @@ export default class HexGridRenderer {
     const newCapacity = Math.ceil(batch.capacity * CAPACITY_PAD);
     const newMesh = new THREE.InstancedMesh(this._geometry, batch.material, newCapacity);
     newMesh.frustumCulled = false;
+    newMesh.visible = this._visible;
 
     // Copy existing instance matrices
     const tempMatrix = new THREE.Matrix4();
@@ -254,8 +268,10 @@ export default class HexGridRenderer {
 }
 
 // Flat pointy-top hex on the XZ plane. Vertices at y=0.
-// Uses BufferGeometry directly — no Shape/Extrude overhead.
+// Uses BufferGeometry directly -- no Shape/Extrude overhead.
 function createFlatHexGeometry(size) {
+  // 96% of full size so gaps between adjacent hexes make the grid visible
+  const inset = size * 0.96;
   const vertices = [];
   const indices = [];
 
@@ -266,13 +282,13 @@ function createFlatHexGeometry(size) {
   for (let i = 0; i < 6; i++) {
     const angle = (60 * i - 30) * (Math.PI / 180);
     vertices.push(
-      size * Math.cos(angle), // x
-      0,                       // y (flat)
-      size * Math.sin(angle)   // z
+      inset * Math.cos(angle), // x
+      0,                        // y (flat)
+      inset * Math.sin(angle)   // z
     );
   }
 
-  // 6 triangles: center → vertex[i] → vertex[i+1]
+  // 6 triangles: center â†’ vertex[i] â†’ vertex[i+1]
   for (let i = 1; i <= 6; i++) {
     indices.push(0, i < 6 ? i + 1 : 1, i);
   }

@@ -150,10 +150,39 @@
       color: var(--accent-cyan);
       text-transform: uppercase;
       letter-spacing: 1.5px;
-      margin-bottom: 15px;
+      margin-bottom: 0;
       display: flex;
       align-items: center;
       gap: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .card-header::after {
+      content: '\25be'; /* down triangle */
+      margin-left: auto;
+      font-size: 14px;
+      transition: transform 0.2s ease;
+    }
+
+    .control-card.collapsed .card-header {
+      margin-bottom: 0;
+    }
+
+    .control-card.collapsed .card-header::after {
+      transform: rotate(-90deg);
+    }
+
+    .control-card.collapsed {
+      cursor: pointer;
+    }
+
+    .card-body {
+      margin-top: 15px;
+    }
+
+    .control-card.collapsed .card-body {
+      display: none;
     }
 
     .card-header::before {

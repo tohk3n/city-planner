@@ -1,44 +1,73 @@
-// Grid size configuration panel.
+// Grid size — maps Bitcraft claim tiers to hex grid bounds.
 //
-// Renders into a container element. Offers three sizing modes:
-//   - Radius: hex-shaped grid, single number (good for circular claims)
-//   - Rectangle: W × H (good for rectangular parcels)
-//   - Custom: direct min/max Q/R bounds
+// In-game, settlements start small and unlock larger claims as they
+// tier up. Claims go from ~1k to ~10k tile hexes in increments of ~1k.
+// This UI exposes that as a simple slider so players think in game
+// terms, not coordinate math.
 //
-// Emits a resize callback with {minQ, maxQ, minR, maxR} whenever the
-// user applies a change. Doesn't touch app state directly — the caller
-// decides what to do with the new bounds.
+// "Advanced" toggle reveals the raw radius/rect/custom controls for
+// people who need exact bounds (modders, testing, etc).
+//
+// The radius-to-tile-count mapping was computed by actually running
+// the spacer test across all hexes at each radius. The 7/9 ratio
+// is asymptotic; exact counts vary by lattice alignment.
 
-const PRESETS = [
-  { label: 'Small (30)', mode: 'radius', value: 15 },
-  { label: 'Medium (60)', mode: 'radius', value: 30 },
-  { label: 'Large (100)', mode: 'radius', value: 50 },
-  { label: 'Huge (150)', mode: 'radius', value: 75 },
+import { isSpacerHex } from '../core/tile-system.js';
+
+// Pre-computed: radius that gets closest to each 1k tier.
+// Exact tile counts from brute-force spacer test, not estimates.
+const CLAIM_TIERS = [
+  { label: 'Tier 1',  target: 1000,  radius: 17, tiles: 949   },
+  { label: 'Tier 2',  target: 2000,  radius: 25, tiles: 2023  },
+  { label: 'Tier 3',  target: 3000,  radius: 31, tiles: 3087  },
+  { label: 'Tier 4',  target: 4000,  radius: 35, tiles: 3913  },
+  { label: 'Tier 5',  target: 5000,  radius: 40, tiles: 5103  },
+  { label: 'Tier 6',  target: 6000,  radius: 43, tiles: 5887  },
+  { label: 'Tier 7',  target: 7000,  radius: 47, tiles: 7009  },
+  { label: 'Tier 8',  target: 8000,  radius: 50, tiles: 7923  },
+  { label: 'Tier 9',  target: 9000,  radius: 53, tiles: 8893  },
+  { label: 'Tier 10', target: 10000, radius: 56, tiles: 9919  },
 ];
 
 export default class GridSizeUI {
   constructor(container, onResize) {
     this.container = container;
     this.onResize = onResize;
-    this.mode = 'radius';
-    this.radius = 50;
-    this.rectW = 100;
-    this.rectH = 100;
-    this.custom = { minQ: -50, maxQ: 49, minR: -50, maxR: 49 };
+
+    // Default: Tier 5 (~5k tiles)
+    this.tierIndex = 4;
+
+    // Advanced mode state (hidden by default)
+    this._advanced = false;
+    this._advMode = 'radius';
+    this._advRadius = 50;
+    this._advRectW = 100;
+    this._advRectH = 100;
+    this._advCustom = { minQ: -50, maxQ: 49, minR: -50, maxR: 49 };
 
     this._build();
   }
 
-  // Set current values from existing bounds (e.g. after loading a save).
+  // Restore from saved bounds (loading a plan file).
+  // Try to match a tier; fall back to advanced if it doesn't fit.
   setBounds(bounds) {
-    this.custom = { ...bounds };
+    const radius = Math.max(Math.abs(bounds.minQ), Math.abs(bounds.maxQ),
+                            Math.abs(bounds.minR), Math.abs(bounds.maxR));
     const w = bounds.maxQ - bounds.minQ + 1;
     const h = bounds.maxR - bounds.minR + 1;
-    this.rectW = w;
-    this.rectH = h;
-    // Approximate radius from symmetric bounds
-    this.radius = Math.max(Math.abs(bounds.minQ), Math.abs(bounds.maxQ),
-                           Math.abs(bounds.minR), Math.abs(bounds.maxR));
+
+    const tierMatch = CLAIM_TIERS.findIndex(t => t.radius === radius);
+    if (tierMatch >= 0 && w === h) {
+      this.tierIndex = tierMatch;
+      this._advanced = false;
+    } else {
+      this._advanced = true;
+      this._advRadius = radius;
+      this._advRectW = w;
+      this._advRectH = h;
+      this._advCustom = { ...bounds };
+    }
+
     this._updateDisplay();
   }
 
@@ -46,21 +75,51 @@ export default class GridSizeUI {
     const c = this.container;
     c.innerHTML = '';
 
-    // Presets
-    const presetRow = el('div', { style: 'display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;' });
-    for (const p of PRESETS) {
-      const btn = el('button', { textContent: p.label, className: 'grid-preset-btn' });
-      btn.addEventListener('click', () => {
-        this.mode = p.mode;
-        this.radius = p.value;
-        this._apply();
-        this._updateDisplay();
-      });
-      presetRow.appendChild(btn);
-    }
-    c.appendChild(presetRow);
+    // -- Tier slider --
+    this._tierSection = el('div');
 
-    // Mode tabs
+    const sliderRow = el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:8px;' });
+    this._tierSlider = el('input', { style: 'flex:1;accent-color:var(--accent-cyan);' });
+    this._tierSlider.type = 'range';
+    this._tierSlider.min = 0;
+    this._tierSlider.max = CLAIM_TIERS.length - 1;
+    this._tierSlider.value = this.tierIndex;
+    this._tierSlider.addEventListener('input', () => {
+      this.tierIndex = parseInt(this._tierSlider.value);
+      this._updateTierDisplay();
+    });
+    sliderRow.appendChild(this._tierSlider);
+    this._tierSection.appendChild(sliderRow);
+
+    this._tierInfo = el('div', {
+      style: 'text-align:center;font-family:"Orbitron",monospace;font-size:13px;color:var(--accent-cyan);margin-bottom:8px;',
+    });
+    this._tierSection.appendChild(this._tierInfo);
+
+    const applyBtn = el('button', {
+      textContent: 'APPLY CLAIM SIZE',
+      className: 'grid-apply-btn',
+    });
+    applyBtn.addEventListener('click', () => this._applyTier());
+    this._tierSection.appendChild(applyBtn);
+
+    c.appendChild(this._tierSection);
+
+    // -- Advanced toggle (small, out of the way) --
+    const advToggle = el('button', {
+      textContent: 'ADVANCED \u25b8',
+      style: 'background:none;border:none;color:var(--text-muted);font-family:"Rajdhani",sans-serif;font-size:11px;cursor:pointer;padding:4px 0;margin-top:6px;',
+    });
+    advToggle.addEventListener('click', () => {
+      this._advanced = !this._advanced;
+      this._updateDisplay();
+    });
+    c.appendChild(advToggle);
+    this._advToggle = advToggle;
+
+    // -- Advanced panel --
+    this._advPanel = el('div', { style: 'margin-top:8px;' });
+
     const tabs = el('div', { style: 'display:flex;gap:4px;margin-bottom:8px;' });
     for (const m of ['radius', 'rectangle', 'custom']) {
       const btn = el('button', {
@@ -68,99 +127,126 @@ export default class GridSizeUI {
         className: 'grid-mode-tab',
         dataset: { mode: m },
       });
-      btn.addEventListener('click', () => {
-        this.mode = m;
-        this._updateDisplay();
-      });
+      btn.addEventListener('click', () => { this._advMode = m; this._updateDisplay(); });
       tabs.appendChild(btn);
     }
-    c.appendChild(tabs);
-    this._tabs = tabs;
+    this._advPanel.appendChild(tabs);
+    this._advTabs = tabs;
 
-    // Radius panel
-    this._radiusPanel = el('div');
-    const radiusInput = inputRow('Radius', this.radius, 5, 200, (v) => { this.radius = v; });
-    this._radiusPanel.appendChild(radiusInput.row);
-    this._radiusInput = radiusInput.input;
-    c.appendChild(this._radiusPanel);
+    this._advRadiusPanel = el('div');
+    const ri = inputRow('Radius', this._advRadius, 5, 200, v => { this._advRadius = v; });
+    this._advRadiusPanel.appendChild(ri.row);
+    this._advRadiusInput = ri.input;
+    this._advPanel.appendChild(this._advRadiusPanel);
 
-    // Rectangle panel
-    this._rectPanel = el('div');
-    const wInput = inputRow('Width', this.rectW, 10, 400, (v) => { this.rectW = v; });
-    const hInput = inputRow('Height', this.rectH, 10, 400, (v) => { this.rectH = v; });
-    this._rectPanel.appendChild(wInput.row);
-    this._rectPanel.appendChild(hInput.row);
-    this._rectWInput = wInput.input;
-    this._rectHInput = hInput.input;
-    c.appendChild(this._rectPanel);
+    this._advRectPanel = el('div');
+    const wi = inputRow('Width', this._advRectW, 10, 400, v => { this._advRectW = v; });
+    const hi = inputRow('Height', this._advRectH, 10, 400, v => { this._advRectH = v; });
+    this._advRectPanel.appendChild(wi.row);
+    this._advRectPanel.appendChild(hi.row);
+    this._advRectWInput = wi.input;
+    this._advRectHInput = hi.input;
+    this._advPanel.appendChild(this._advRectPanel);
 
-    // Custom panel
-    this._customPanel = el('div');
-    const minQIn = inputRow('Min Q', this.custom.minQ, -500, 500, (v) => { this.custom.minQ = v; });
-    const maxQIn = inputRow('Max Q', this.custom.maxQ, -500, 500, (v) => { this.custom.maxQ = v; });
-    const minRIn = inputRow('Min R', this.custom.minR, -500, 500, (v) => { this.custom.minR = v; });
-    const maxRIn = inputRow('Max R', this.custom.maxR, -500, 500, (v) => { this.custom.maxR = v; });
-    this._customPanel.appendChild(minQIn.row);
-    this._customPanel.appendChild(maxQIn.row);
-    this._customPanel.appendChild(minRIn.row);
-    this._customPanel.appendChild(maxRIn.row);
-    this._customInputs = { minQ: minQIn.input, maxQ: maxQIn.input, minR: minRIn.input, maxR: maxRIn.input };
-    c.appendChild(this._customPanel);
+    this._advCustomPanel = el('div');
+    const ci = {};
+    for (const k of ['minQ', 'maxQ', 'minR', 'maxR']) {
+      const row = inputRow(k, this._advCustom[k], -500, 500, v => { this._advCustom[k] = v; });
+      this._advCustomPanel.appendChild(row.row);
+      ci[k] = row.input;
+    }
+    this._advCustomInputs = ci;
+    this._advPanel.appendChild(this._advCustomPanel);
 
-    // Apply button
-    const applyBtn = el('button', { textContent: 'Apply Grid Size', className: 'grid-apply-btn' });
-    applyBtn.addEventListener('click', () => this._apply());
-    c.appendChild(applyBtn);
+    const advApply = el('button', { textContent: 'APPLY', className: 'grid-apply-btn' });
+    advApply.addEventListener('click', () => this._applyAdvanced());
+    this._advPanel.appendChild(advApply);
 
-    // Stats display
-    this._stats = el('div', { className: 'grid-stats', style: 'margin-top:8px;font-size:12px;opacity:0.7;' });
+    c.appendChild(this._advPanel);
+
+    // -- Stats readout --
+    this._stats = el('div', {
+      className: 'grid-stats',
+      style: 'margin-top:8px;font-size:12px;opacity:0.7;',
+    });
     c.appendChild(this._stats);
 
     this._updateDisplay();
   }
 
   _updateDisplay() {
-    // Tab highlighting
-    for (const btn of this._tabs.children) {
-      btn.classList.toggle('active', btn.dataset.mode === this.mode);
+    this._updateTierDisplay();
+    this._advPanel.style.display = this._advanced ? 'block' : 'none';
+    this._advToggle.textContent = this._advanced ? 'ADVANCED \u25be' : 'ADVANCED \u25b8';
+
+    if (this._advanced) {
+      for (const btn of this._advTabs.children) {
+        btn.classList.toggle('active', btn.dataset.mode === this._advMode);
+      }
+      this._advRadiusPanel.style.display = this._advMode === 'radius' ? 'block' : 'none';
+      this._advRectPanel.style.display = this._advMode === 'rectangle' ? 'block' : 'none';
+      this._advCustomPanel.style.display = this._advMode === 'custom' ? 'block' : 'none';
+
+      this._advRadiusInput.value = this._advRadius;
+      this._advRectWInput.value = this._advRectW;
+      this._advRectHInput.value = this._advRectH;
+      for (const k of ['minQ', 'maxQ', 'minR', 'maxR']) {
+        this._advCustomInputs[k].value = this._advCustom[k];
+      }
     }
-
-    this._radiusPanel.style.display = this.mode === 'radius' ? 'block' : 'none';
-    this._rectPanel.style.display = this.mode === 'rectangle' ? 'block' : 'none';
-    this._customPanel.style.display = this.mode === 'custom' ? 'block' : 'none';
-
-    this._radiusInput.value = this.radius;
-    this._rectWInput.value = this.rectW;
-    this._rectHInput.value = this.rectH;
-    this._customInputs.minQ.value = this.custom.minQ;
-    this._customInputs.maxQ.value = this.custom.maxQ;
-    this._customInputs.minR.value = this.custom.minR;
-    this._customInputs.maxR.value = this.custom.maxR;
-
-    const bounds = this._currentBounds();
-    const w = bounds.maxQ - bounds.minQ + 1;
-    const h = bounds.maxR - bounds.minR + 1;
-    const approxHexes = w * h;
-    this._stats.textContent = `~${approxHexes.toLocaleString()} hexes (${w}×${h})`;
   }
 
-  _currentBounds() {
-    if (this.mode === 'radius') {
-      return { minQ: -this.radius, maxQ: this.radius, minR: -this.radius, maxR: this.radius };
-    }
-    if (this.mode === 'rectangle') {
-      const halfW = Math.floor(this.rectW / 2);
-      const halfH = Math.floor(this.rectH / 2);
-      return { minQ: -halfW, maxQ: halfW, minR: -halfH, maxR: halfH };
-    }
-    return { ...this.custom };
+  _updateTierDisplay() {
+    const tier = CLAIM_TIERS[this.tierIndex];
+    this._tierSlider.value = this.tierIndex;
+    this._tierInfo.textContent = `${tier.label} \u00b7 ~${tier.target.toLocaleString()} tiles`;
   }
 
-  _apply() {
-    const bounds = this._currentBounds();
-    this._updateDisplay();
+  _applyTier() {
+    const tier = CLAIM_TIERS[this.tierIndex];
+    const r = tier.radius;
+    const bounds = { minQ: -r, maxQ: r, minR: -r, maxR: r };
+    this._showStats(bounds, tier.tiles);
     if (this.onResize) this.onResize(bounds);
   }
+
+  _applyAdvanced() {
+    const bounds = this._advancedBounds();
+    const tileCount = countTileHexes(bounds);
+    this._showStats(bounds, tileCount);
+    if (this.onResize) this.onResize(bounds);
+  }
+
+  _advancedBounds() {
+    if (this._advMode === 'radius') {
+      const r = this._advRadius;
+      return { minQ: -r, maxQ: r, minR: -r, maxR: r };
+    }
+    if (this._advMode === 'rectangle') {
+      const halfW = Math.floor(this._advRectW / 2);
+      const halfH = Math.floor(this._advRectH / 2);
+      return { minQ: -halfW, maxQ: halfW, minR: -halfH, maxR: halfH };
+    }
+    return { ...this._advCustom };
+  }
+
+  _showStats(bounds, tileCount) {
+    const w = bounds.maxQ - bounds.minQ + 1;
+    const h = bounds.maxR - bounds.minR + 1;
+    this._stats.textContent = `${tileCount.toLocaleString()} tile hexes (${w}\u00d7${h} grid)`;
+  }
+}
+
+// Brute-force tile count. Only runs when user clicks Apply,
+// so O(n^2) over bounds is totally fine.
+function countTileHexes(bounds) {
+  let count = 0;
+  for (let q = bounds.minQ; q <= bounds.maxQ; q++) {
+    for (let r = bounds.minR; r <= bounds.maxR; r++) {
+      if (!isSpacerHex(q, r)) count++;
+    }
+  }
+  return count;
 }
 
 // --- DOM helpers ---

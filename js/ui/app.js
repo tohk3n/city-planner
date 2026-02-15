@@ -8,9 +8,13 @@
 // UI code calls app.paint(), app.terraform(), app.placeBuilding(), etc.
 // It never reaches into module internals or mutates state directly.
 
-import { axialToPixel, getHexesInRadius } from '../core/hex-math.js';
+import * as THREE from 'three';
+import {
+  axialToPixel, getHexesInRadius, getNeighbors,
+  getHexVertices, getDirectionIndex, getExternalVertices, sortVerticesByAngle,
+} from '../core/hex-math.js';
 import { HexGrid, rectBounds } from '../core/grid.js';
-import TileSystem from '../core/tile-system.js';
+import TileSystem, { isSpacerHex } from '../core/tile-system.js';
 import BuildingCatalog from '../core/building-catalog.js';
 import SceneManager from '../rendering/SceneManager.js';
 import HexGridRenderer from '../rendering/HexGridRenderer.js';
@@ -30,7 +34,7 @@ export default class App {
     this.grid = null; // HexGrid, created in init() after bounds are set
     this.tiles = new TileSystem();
     this.catalog = new BuildingCatalog();
-    this.buildings = new Map(); // placementId → { catalogId, q, r, rotation, color, hexes }
+    this.buildings = new Map(); // placementId Ã¢â€ â€™ { catalogId, q, r, rotation, color, hexes }
 
     // Grid bounds (user-configurable)
     this.bounds = { minQ: -50, maxQ: 49, minR: -50, maxR: 49 };
@@ -58,6 +62,9 @@ export default class App {
 
     this._nextBuildingId = 1;
     this._callbacks = {};
+    this._boundaryGroup = null;
+    this._depthOverlay = null;    // InstancedMesh for 2D depth heatmap
+    this._depthOverlayGeo = null; // full-size hex (not 96% inset) to fill gaps
   }
 
   // --- Lifecycle ---
@@ -69,6 +76,7 @@ export default class App {
     // Generate grid + tiles
     this.grid = new HexGrid(rectBounds(this.bounds.minQ, this.bounds.maxQ, this.bounds.minR, this.bounds.maxR));
     this.tiles.generate(this.bounds);
+    this._markSpacers();
 
     // Scene + renderers
     this.scene = new SceneManager(container);
@@ -84,7 +92,7 @@ export default class App {
     this.labels.setOffset(centerPx.x, centerPx.z);
     this.labels.setTerrainHeightFn((q, r) => this._terrainHeight(q, r));
 
-    // Input — InteractionManager reads renderer.domElement from sceneManager
+    // Input Ã¢â‚¬â€ InteractionManager reads renderer.domElement from sceneManager
     this.interaction = new InteractionManager(this.scene, HEX_SIZE);
     this.camera = new CameraController(this.scene);
 
@@ -106,6 +114,7 @@ export default class App {
     this.bounds = { minQ, maxQ, minR, maxR };
     this.grid.setBounds(rectBounds(minQ, maxQ, minR, maxR));
     this.tiles.generate(this.bounds);
+    this._markSpacers();
 
     const centerPx = this._computeCenterOffset();
     this.terrain.setOffset(centerPx.x, centerPx.z);
@@ -116,6 +125,11 @@ export default class App {
     this.hexGrid.rebuild(this.grid);
     this._rebuildTerrain();
     this._rebuildBuildings();
+    if (this.showBoundaries) {
+      this._clearBoundaryLines();
+      this._buildBoundaryLines();
+    }
+    if (this.heightMapMode) this._refreshDepthOverlay();
 
     this._emit('gridResize', this.bounds);
   }
@@ -187,8 +201,8 @@ export default class App {
       tile.depth = clamped;
       this.terrain.updateTile(tile, (q, r) => this._getColor(q, r), this.heightMapMode);
     }
-    // Refresh labels and buildings sitting on these tiles
     this.labels.refreshPositions();
+    if (this.heightMapMode) this._refreshDepthOverlay();
     this._emit('depthChange', clamped);
   }
 
@@ -199,6 +213,7 @@ export default class App {
     }
     this._rebuildTerrain();
     this.labels.refreshPositions();
+    if (this.heightMapMode) this._refreshDepthOverlay();
   }
 
   // --- Buildings ---
@@ -282,27 +297,40 @@ export default class App {
 
   toggle3D(on) {
     this.show3D = on;
+    this.hexGrid.setVisible(!on); // hide flat grid in 3D, show in 2D
+    if (this._depthOverlay) this._depthOverlay.visible = !on;
     if (on) {
       this.scene.setMode('perspective');
       this._rebuildTerrain();
       this._rebuildBuildings();
     } else {
       this.scene.setMode('ortho');
-      this.heightMapMode = false;
+      this.terrain.clear();
+      this.buildingRenderer.clear();
     }
     this._emit('viewModeChange', on);
   }
 
   toggleHeightMap(on) {
     this.heightMapMode = on;
-    this.terrain.recolor(this.tiles, (q, r) => this._getColor(q, r), on);
+
+    // 3D mode: recolor the extruded terrain meshes
+    if (this.terrain.tileGroups.size > 0) {
+      this.terrain.recolor(this.tiles, (q, r) => this._getColor(q, r), on);
+    }
+
+    // 2D mode: depth-colored full-size hexes sit at y=-0.1 under the 96% inset
+    // painted hexes. The 4% gap reveals the depth color as hex "borders".
+    this._clearDepthOverlay();
+    if (on) this._buildDepthOverlay();
+
     this._emit('heightMapChange', on);
   }
 
   toggleBoundaries(on) {
     this.showBoundaries = on;
-    // Boundary visualization is a future enhancement.
-    // TerrainRenderer could add wireframe outlines per tile.
+    this._clearBoundaryLines();
+    if (on) this._buildBoundaryLines();
     this._emit('boundariesChange', on);
   }
 
@@ -398,6 +426,15 @@ export default class App {
     this.hexGrid.applyChanges(this.grid, changes);
   }
 
+  // Flag spacer-cluster hexes so the renderer gives them a darker shade.
+  // This reveals the triangular lattice pattern that defines Bitcraft's
+  // coordinate system -- 7-hex tile clusters separated by spacer gaps.
+  _markSpacers() {
+    this.grid.forEach(hex => {
+      hex.spacer = isSpacerHex(hex.q, hex.r);
+    });
+  }
+
   _rebuildTerrain() {
     this.terrain.rebuild(this.tiles, (q, r) => this._getColor(q, r), this.heightMapMode);
   }
@@ -412,4 +449,181 @@ export default class App {
     }
   }
 
+  // Tile boundary visualization â€” dashed outlines around each 7-hex cluster.
+  // Lives on the XZ plane at y=0.5 (just above the flat hex grid).
+
+  _buildBoundaryLines() {
+    const group = new THREE.Group();
+    group.name = 'tileBoundaries';
+
+    const mat = new THREE.LineBasicMaterial({
+      color: 0x00ffff, opacity: 0.35, transparent: true,
+    });
+
+    const centerPx = this._computeCenterOffset();
+
+    for (const tile of this.tiles.tiles.values()) {
+      const points = this._tileBoundaryPoints(tile, centerPx);
+      if (points.length < 3) continue;
+
+      points.push(points[0].clone()); // close the loop
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      group.add(new THREE.Line(geo, mat));
+    }
+
+    this.scene.scene.add(group);
+    this._boundaryGroup = group;
+  }
+
+  _clearBoundaryLines() {
+    if (!this._boundaryGroup) return;
+    this.scene.scene.remove(this._boundaryGroup);
+    // Dispose line geometries
+    for (const child of this._boundaryGroup.children) {
+      if (child.geometry) child.geometry.dispose();
+    }
+    if (this._boundaryGroup.children[0]?.material) {
+      this._boundaryGroup.children[0].material.dispose();
+    }
+    this._boundaryGroup = null;
+  }
+
+  // Compute the outer boundary vertices of a 7-hex cluster.
+  // For each neighbor hex, the vertices on the cluster edge are the
+  // hex vertices that face OUTWARD (away from the cluster center).
+  _tileBoundaryPoints(tile, centerPx) {
+    const center = { q: tile.q, r: tile.r };
+    const cPx = axialToPixel(center.q, center.r, HEX_SIZE);
+    const allVerts = [];
+
+    for (const nb of getNeighbors(center.q, center.r)) {
+      const dir = getDirectionIndex(center.q, center.r, nb.q, nb.r);
+      if (dir < 0) continue;
+
+      const nbPx = axialToPixel(nb.q, nb.r, HEX_SIZE);
+      const verts = getHexVertices(nbPx.x, nbPx.y, HEX_SIZE);
+      const external = getExternalVertices(dir, verts);
+      allVerts.push(...external);
+    }
+
+    const sorted = sortVerticesByAngle(allVerts, { x: cPx.x, y: cPx.y });
+    return sorted.map(v =>
+      new THREE.Vector3(v.x - centerPx.x, 0.5, v.y - centerPx.z)
+    );
+  }
+
+  // --- Depth overlay (2D height map) ---
+  // Full-size hex meshes at y=-0.1, colored by tile depth.
+  // The 96%-inset painted hexes sit on top at y=0, so the 4% gap
+  // reveals these depth-colored hexes as gradient "borders".
+  // Single InstancedMesh with per-instance colors = 1 draw call.
+
+  _buildDepthOverlay() {
+    this._clearDepthOverlay();
+
+    const geo = this._getDepthOverlayGeo();
+    const count = this.grid.hexCount;
+    if (count === 0) return;
+
+    // White base color so instance colors pass through unmodified
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const mesh = new THREE.InstancedMesh(geo, mat, count);
+    mesh.frustumCulled = false;
+
+    const centerPx = this._computeCenterOffset();
+    const matrix = new THREE.Matrix4();
+    const color = new THREE.Color();
+    let idx = 0;
+
+    this.grid.forEach(hex => {
+      const px = axialToPixel(hex.q, hex.r, HEX_SIZE);
+      matrix.identity();
+      matrix.setPosition(px.x - centerPx.x, -0.1, px.y - centerPx.z);
+      mesh.setMatrixAt(idx, matrix);
+
+      // Color by owning tile's depth (spacer hexes get sea-level color)
+      const tile = this.tiles.getTileForHex(hex.q, hex.r);
+      const depth = tile ? tile.depth : DEFAULT_DEPTH;
+      color.set(depthToColor(depth));
+      mesh.setColorAt(idx, color);
+
+      idx++;
+    });
+
+    mesh.count = idx;
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+
+    this.scene.scene.add(mesh);
+    this._depthOverlay = mesh;
+  }
+
+  _clearDepthOverlay() {
+    if (!this._depthOverlay) return;
+    this.scene.scene.remove(this._depthOverlay);
+    this._depthOverlay.dispose();
+    this._depthOverlay = null;
+  }
+
+  _refreshDepthOverlay() {
+    // Rebuild is cheap (just instance matrices + colors, geometry is shared)
+    this._buildDepthOverlay();
+  }
+
+  _getDepthOverlayGeo() {
+    if (this._depthOverlayGeo) return this._depthOverlayGeo;
+
+    // Full-size hex (NOT the 96% inset) so it fills the gap between painted hexes
+    const verts = [];
+    const indices = [];
+    verts.push(0, 0, 0);
+    for (let i = 0; i < 6; i++) {
+      const angle = (60 * i - 30) * (Math.PI / 180);
+      verts.push(HEX_SIZE * Math.cos(angle), 0, HEX_SIZE * Math.sin(angle));
+    }
+    for (let i = 1; i <= 6; i++) {
+      indices.push(0, i < 6 ? i + 1 : 1, i);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    this._depthOverlayGeo = geo;
+    return geo;
+  }
+
+}
+
+// --- Depth color gradient ---
+// Maps tile depth (0-100) to a color. Sea level = 25.
+// Matches the in-game terraform color convention.
+
+const DEPTH_GRADIENT = [
+  { stop: 0,   color: new THREE.Color(0x003366) }, // deep ocean
+  { stop: 15,  color: new THREE.Color(0x0066cc) }, // water
+  { stop: 23,  color: new THREE.Color(0x0099ff) }, // shallow
+  { stop: 25,  color: new THREE.Color(0x44aa44) }, // sea level (green)
+  { stop: 30,  color: new THREE.Color(0x66cc44) }, // low land
+  { stop: 45,  color: new THREE.Color(0xcccc00) }, // mid
+  { stop: 60,  color: new THREE.Color(0xff9900) }, // high
+  { stop: 80,  color: new THREE.Color(0xff3300) }, // mountain
+  { stop: 100, color: new THREE.Color(0xcc0000) }, // peak
+];
+
+const _lerpColor = new THREE.Color();
+
+function depthToColor(depth) {
+  const d = Math.max(0, Math.min(100, depth));
+
+  // Find the two gradient stops we're between
+  for (let i = 0; i < DEPTH_GRADIENT.length - 1; i++) {
+    const lo = DEPTH_GRADIENT[i];
+    const hi = DEPTH_GRADIENT[i + 1];
+    if (d >= lo.stop && d <= hi.stop) {
+      const t = (d - lo.stop) / (hi.stop - lo.stop);
+      _lerpColor.copy(lo.color).lerp(hi.color, t);
+      return _lerpColor.getHex();
+    }
+  }
+  return DEPTH_GRADIENT[DEPTH_GRADIENT.length - 1].color.getHex();
 }
