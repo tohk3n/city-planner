@@ -6,9 +6,9 @@ import { CONFIG, BUILDING_STAMPS } from './config.js';
 import { AppState } from './state.js';
 import { renderHexGrid, renderLargeTileBoundaries, renderDebugCenters, showHoverPreview, clearHoverPreview, updateViewBox, updateTileDepth } from './rendering.js';
 import { paintHex } from './painting.js';
-import { selectBuilding, clearBuildingHighlight, deleteBuilding, showBuildingInfo, hideBuildingInfo, isHexPartOfBuilding, startRepositioning, cancelRepositioning, completeRepositioning, showRepositionPreview, repositioningState } from './building-management.js';
-import { saveAsJson, resetMap, setupFileInput } from './file-ops.js';
-import { showThreeJSView, hideThreeJSView, rebuildTerrainColors, resetCameraPosition } from './threejs-api.js';
+import { selectBuilding, clearBuildingHighlight, deleteBuilding, showBuildingInfo, hideBuildingInfo, isHexPartOfBuilding, startRepositioning, cancelRepositioning, completeRepositioning, showRepositionPreview, repositioningState } from '../core/building-management.js';
+import { saveAsJson, resetMap, setupFileInput } from '../core/file-ops.js';
+import { showThreeJSView, hideThreeJSView, rebuildTerrainColors, resetCameraPosition } from '../threejs-api.js';
 
 /**
  * Build color palette
