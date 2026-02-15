@@ -26,10 +26,10 @@ export default class HexGridRenderer {
     // Shared geometry for all flat hexes
     this._geometry = createFlatHexGeometry(hexSize);
 
-    // color string â†’ ColorBatch
+    // color string → ColorBatch
     this._batches = new Map();
 
-    // hexKey â†’ { color, slot } so we know where each hex lives
+    // hexKey → { color, slot } so we know where each hex lives
     this._hexIndex = new Map();
 
     // World offset to center the grid at origin.
@@ -166,7 +166,7 @@ export default class HexGridRenderer {
       material,
       capacity,
       count: 0,
-      // Bidirectional index: slotâ†’hexKey
+      // Bidirectional index: slot→hexKey
       keyToSlot: new Map(),
       slotToKey: new Map(),
     };
@@ -288,7 +288,7 @@ function createFlatHexGeometry(size) {
     );
   }
 
-  // 6 triangles: center â†’ vertex[i] â†’ vertex[i+1]
+  // 6 triangles: center → vertex[i] → vertex[i+1]
   for (let i = 1; i <= 6; i++) {
     indices.push(0, i < 6 ? i + 1 : 1, i);
   }

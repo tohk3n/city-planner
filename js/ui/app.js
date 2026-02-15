@@ -34,7 +34,7 @@ export default class App {
     this.grid = null; // HexGrid, created in init() after bounds are set
     this.tiles = new TileSystem();
     this.catalog = new BuildingCatalog();
-    this.buildings = new Map(); // placementId Ã¢â€ â€™ { catalogId, q, r, rotation, color, hexes }
+    this.buildings = new Map(); // placementId → { catalogId, q, r, rotation, color, hexes }
 
     // Grid bounds (user-configurable)
     this.bounds = { minQ: -50, maxQ: 49, minR: -50, maxR: 49 };
@@ -92,7 +92,7 @@ export default class App {
     this.labels.setOffset(centerPx.x, centerPx.z);
     this.labels.setTerrainHeightFn((q, r) => this._terrainHeight(q, r));
 
-    // Input Ã¢â‚¬â€ InteractionManager reads renderer.domElement from sceneManager
+    // Input — InteractionManager reads renderer.domElement from sceneManager
     this.interaction = new InteractionManager(this.scene, HEX_SIZE);
     this.camera = new CameraController(this.scene);
 
@@ -104,6 +104,7 @@ export default class App {
 
     // Initial full render via HexGrid's dirty tracking
     this.hexGrid.rebuild(this.grid);
+    this._zoomToFit();
 
     return this;
   }
@@ -123,13 +124,21 @@ export default class App {
     this.labels.refreshPositions();
 
     this.hexGrid.rebuild(this.grid);
-    this._rebuildTerrain();
-    this._rebuildBuildings();
+
+    // Fit the camera to the new grid extents
+    this._zoomToFit();
+
+    // Only rebuild 3D stuff if we're in 3D
+    if (this.show3D) {
+      this._rebuildTerrain();
+      this._rebuildBuildings();
+    }
+
     if (this.showBoundaries) {
       this._clearBoundaryLines();
       this._buildBoundaryLines();
     }
-    if (this.heightMapMode) this._refreshDepthOverlay();
+    if (this.heightMapMode && !this.show3D) this._refreshDepthOverlay();
 
     this._emit('gridResize', this.bounds);
   }
@@ -199,7 +208,7 @@ export default class App {
       const tile = this.tiles.tiles.get(key);
       if (!tile) continue;
       tile.depth = clamped;
-      this.terrain.updateTile(tile, (q, r) => this._getColor(q, r), this.heightMapMode);
+      this.terrain.updateTile(tile, (q, r) => this._getColor(q, r), this.heightMapMode, this.tiles);
     }
     this.labels.refreshPositions();
     if (this.heightMapMode) this._refreshDepthOverlay();
@@ -319,10 +328,9 @@ export default class App {
       this.terrain.recolor(this.tiles, (q, r) => this._getColor(q, r), on);
     }
 
-    // 2D mode: depth-colored full-size hexes sit at y=-0.1 under the 96% inset
-    // painted hexes. The 4% gap reveals the depth color as hex "borders".
+    // 2D only: depth overlay sits at y=-0.1, would clip through 3D terrain
     this._clearDepthOverlay();
-    if (on) this._buildDepthOverlay();
+    if (on && !this.show3D) this._buildDepthOverlay();
 
     this._emit('heightMapChange', on);
   }
@@ -418,6 +426,29 @@ export default class App {
     };
   }
 
+  // Fit the ortho camera so the whole grid fills the viewport with some breathing room.
+  // Perspective mode can do its own thing later.
+  _zoomToFit() {
+    if (this.scene.mode !== 'ortho') return;
+
+    const minPx = axialToPixel(this.bounds.minQ, this.bounds.minR, HEX_SIZE);
+    const maxPx = axialToPixel(this.bounds.maxQ, this.bounds.maxR, HEX_SIZE);
+    const worldW = Math.abs(maxPx.x - minPx.x);
+    const worldH = Math.abs(maxPx.y - minPx.y);
+    const extent = Math.max(worldW, worldH);
+
+    if (extent <= 0) return;
+
+    // ORTHO_BASE_EXTENT (2000) is the half-height at zoom=1.
+    // We want the grid to fill ~85% of the viewport (15% padding).
+    const zoom = (2000 * 2 * 0.85) / extent;
+    this.scene.setOrthoZoom(zoom);
+
+    // Recenter the camera on the grid origin
+    this.scene._ortho.position.x = 0;
+    this.scene._ortho.position.z = 0;
+  }
+
   // Drain the grid's dirty set into the hex renderer.
   // Single bottleneck between data mutation and visual update.
   _flushGridChanges() {
@@ -449,7 +480,7 @@ export default class App {
     }
   }
 
-  // Tile boundary visualization â€” dashed outlines around each 7-hex cluster.
+  // Tile boundary visualization — dashed outlines around each 7-hex cluster.
   // Lives on the XZ plane at y=0.5 (just above the flat hex grid).
 
   _buildBoundaryLines() {
@@ -541,9 +572,9 @@ export default class App {
       matrix.setPosition(px.x - centerPx.x, -0.1, px.y - centerPx.z);
       mesh.setMatrixAt(idx, matrix);
 
-      // Color by owning tile's depth (spacer hexes get sea-level color)
-      const tile = this.tiles.getTileForHex(hex.q, hex.r);
-      const depth = tile ? tile.depth : DEFAULT_DEPTH;
+      // Color by depth — tile hexes use their tile's depth,
+      // spacer hexes resolve from their 3 neighboring tiles
+      const depth = this.tiles.getDepthAt(hex.q, hex.r);
       color.set(depthToColor(depth));
       mesh.setColorAt(idx, color);
 
@@ -566,7 +597,7 @@ export default class App {
   }
 
   _refreshDepthOverlay() {
-    // Rebuild is cheap (just instance matrices + colors, geometry is shared)
+    if (this.show3D) return; // 2D-only feature
     this._buildDepthOverlay();
   }
 

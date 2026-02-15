@@ -1,6 +1,6 @@
 // Sparse hex grid storage with dynamic bounds and change tracking.
 // Hexes are keyed by axial "q,r" strings in a Map. Only non-default
-// hexes survive serialization Ã¢â‚¬â€ the grid reconstructs from bounds
+// hexes survive serialization — the grid reconstructs from bounds
 // alone, with modifications layered on top.
 
 import { hexKey, axialDistance, getHexesInRadius, inBounds as axialInBounds } from './hex-math.js';
@@ -195,7 +195,7 @@ export class HexGrid {
   // -- Change tracking --
   // Renderer calls consumeChanges() each frame. Gets the dirty set
   // and fullRebuild flag, then both are cleared. Grid mutates,
-  // renderer reacts Ã¢â‚¬â€ that's the whole contract.
+  // renderer reacts — that's the whole contract.
 
   consumeChanges() {
     const result = {
@@ -260,7 +260,7 @@ export class HexGrid {
   }
 
   // Import v1 saves that used offset (col, row) coordinates.
-  // converterFn is offsetToAxial Ã¢â‚¬â€ injected to keep legacy
+  // converterFn is offsetToAxial — injected to keep legacy
   // knowledge out of the grid module.
   fromLegacyJSON(data, converterFn) {
     if (!data.hexes) return;
@@ -293,7 +293,7 @@ export class HexGrid {
   }
 
   // Fill storage for all hexes within bounds.
-  // Existing hexes preserved Ã¢â‚¬â€ getOrCreate is idempotent.
+  // Existing hexes preserved — getOrCreate is idempotent.
   _populate(bounds) {
     if (bounds.type === 'rect') {
       for (let q = bounds.minQ; q <= bounds.maxQ; q++) {

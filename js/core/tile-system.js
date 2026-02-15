@@ -73,6 +73,42 @@ export function getClusterHexes(q, r) {
   return [center, ...getNeighbors(center.q, center.r)];
 }
 
+// Find the 3 tile cluster centers that border a spacer cluster.
+// Every spacer sits at the interstice of exactly 3 tile clusters
+// (the "super-triangle" from the lattice geometry). Returns empty
+// array if the given hex isn't actually a spacer.
+export function getSpacerNeighborTiles(sq, sr) {
+  if (!isSpacerHex(sq, sr)) return [];
+
+  const seen = new Set();
+  const result = [];
+  for (const n of getNeighbors(sq, sr)) {
+    const center = hexToClusterCenter(n.q, n.r);
+    const key = center.q + ',' + center.r;
+    if (!seen.has(key) && !isSpacerHex(center.q, center.r)) {
+      seen.add(key);
+      result.push(center);
+    }
+  }
+  return result; // always exactly 3 for valid spacer centers
+}
+
+// Resolve a spacer cluster's depth from its 3 neighboring tile depths.
+// Rule (observed in-game):
+//   - If 2+ neighbors agree on a depth, use that depth
+//   - If all 3 disagree, use the lowest
+export function resolveSpacerDepth(depths) {
+  if (depths.length < 3) return depths[0] ?? 25;
+
+  // Check for majority (any 2 match)
+  if (depths[0] === depths[1]) return depths[0];
+  if (depths[0] === depths[2]) return depths[0];
+  if (depths[1] === depths[2]) return depths[1];
+
+  // All different — lowest wins
+  return Math.min(...depths);
+}
+
 // Lattice key for Map storage of tile state.
 export function tileKey(n, m) {
   return n + ',' + m;
@@ -163,6 +199,32 @@ export default class TileSystem {
     if (!tile) return false;
     tile.depth = depth;
     return true;
+  }
+
+  // Get the effective depth at any hex, including spacers.
+  // Tile hexes return their owning tile's depth directly.
+  // Spacer hexes resolve from their 3 neighboring tile depths:
+  //   majority wins, ties go to the lowest.
+  getDepthAt(q, r) {
+    // Fast path: tile hex — just look up the owning tile
+    if (!isSpacerHex(q, r)) {
+      const tile = this.getTileForHex(q, r);
+      return tile ? tile.depth : 25;
+    }
+
+    // Spacer hex — each spacer sits between exactly 3 tile clusters.
+    // Pass the spacer's own coords directly (NOT through hexToClusterCenter,
+    // which rounds to the nearest tile center and breaks everything).
+    const neighborCenters = getSpacerNeighborTiles(q, r);
+
+    const depths = [];
+    for (const nc of neighborCenters) {
+      const { n, m } = axialToLatticeIndex(nc.q, nc.r);
+      const tile = this.tiles.get(tileKey(n, m));
+      depths.push(tile ? tile.depth : 25);
+    }
+
+    return resolveSpacerDepth(depths);
   }
 
   // Get all spacer hex coords within bounds.

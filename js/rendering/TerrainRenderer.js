@@ -17,7 +17,7 @@ import {
   axialToPixel, getNeighbors, getHexVertices,
   getDirectionIndex, getExternalVertices, sortVerticesByAngle,
 } from '../core/hex-math.js';
-import { tileKey } from '../core/tile-system.js';
+import { tileKey, isSpacerHex, getSpacerNeighborTiles, resolveSpacerDepth, axialToLatticeIndex, latticeToAxial } from '../core/tile-system.js';
 
 const HEIGHT_SCALE = 8;
 const BASELINE = -80;
@@ -41,7 +41,8 @@ export default class TerrainRenderer {
     this.scene = scene;
     this.hexSize = hexSize;
 
-    this.tileGroups = new Map(); // tileKey → THREE.Group
+        this.tileGroups = new Map();
+    this._spacerGroups = new Map(); // tileKey → THREE.Group
     this.offset = { x: 0, z: 0 }; // set by caller to match grid centering
 
     // Caches owned by this renderer
@@ -57,15 +58,20 @@ export default class TerrainRenderer {
   rebuild(tileSystem, getColor, heightMapMode = false) {
     this.clear();
 
+    // Tile clusters (terraformable)
     for (const tile of tileSystem.tiles.values()) {
       const group = this._buildTileGroup(tile, getColor, heightMapMode);
       this.scene.add(group);
       this.tileGroups.set(tileKey(tile.n, tile.m), group);
     }
+
+    // Spacer clusters (depth resolved from neighbors)
+    this._rebuildSpacers(tileSystem, getColor, heightMapMode);
   }
 
   // Rebuild a single tile after depth change.
-  updateTile(tile, getColor, heightMapMode = false) {
+  // Also updates adjacent spacer clusters whose depth depends on this tile.
+  updateTile(tile, getColor, heightMapMode = false, tileSystem = null) {
     const key = tileKey(tile.n, tile.m);
     const old = this.tileGroups.get(key);
     if (old) {
@@ -76,6 +82,35 @@ export default class TerrainRenderer {
     const group = this._buildTileGroup(tile, getColor, heightMapMode);
     this.scene.add(group);
     this.tileGroups.set(key, group);
+
+    // Rebuild adjacent spacer clusters (their depth may have changed)
+    if (tileSystem) this._updateAdjacentSpacers(tile, tileSystem, getColor, heightMapMode);
+  }
+
+  _updateAdjacentSpacers(tile, tileSystem, getColor, heightMapMode) {
+    // Walk all 7 hexes of this tile cluster and find bordering spacer hexes
+    const clusterHexes = [{ q: tile.q, r: tile.r }, ...getNeighbors(tile.q, tile.r)];
+    const seen = new Set();
+
+    for (const hex of clusterHexes) {
+      for (const nb of getNeighbors(hex.q, hex.r)) {
+        if (!isSpacerHex(nb.q, nb.r)) continue;
+        const key = nb.q + ',' + nb.r;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        // Remove old
+        const old = this._spacerGroups.get(key);
+        if (old) {
+          this.scene.remove(old);
+          if (old.geometry && !this._geoCache.has(old.geometry)) old.geometry.dispose();
+          this._spacerGroups.delete(key);
+        }
+
+        // Rebuild with resolved depth
+        this._buildSingleSpacer(nb, tileSystem, getColor, heightMapMode);
+      }
+    }
   }
 
   // Fast recolor without rebuilding geometry (heightmap toggle).
@@ -95,6 +130,18 @@ export default class TerrainRenderer {
         child.material = this._getMaterial(color);
       }
     }
+
+    // Spacer meshes use resolved depth
+    for (const [key, mesh] of this._spacerGroups) {
+      if (!mesh.isMesh || !mesh.userData.hex) continue;
+      const { q, r } = mesh.userData.hex;
+      const depth = tileSystem.getDepthAt(q, r);
+      const height = (depth - SEA_LEVEL_DEPTH) * HEIGHT_SCALE;
+      const color = heightMapMode
+        ? heightColor(height)
+        : cssToHex(getColor(q, r));
+      mesh.material = this._getMaterial(color);
+    }
   }
 
   setOffset(x, z) {
@@ -108,6 +155,11 @@ export default class TerrainRenderer {
       this._disposeGroup(group);
     }
     this.tileGroups.clear();
+
+    for (const mesh of this._spacerGroups.values()) {
+      this.scene.remove(mesh);
+    }
+    this._spacerGroups.clear();
   }
 
   dispose() {
@@ -120,6 +172,55 @@ export default class TerrainRenderer {
   }
 
   // -- Internals --
+
+  // Build extruded terrain for all spacer hexes within the generated tile set.
+  // Each spacer is a single hex (not a 7-hex cluster) sitting in the gap between
+  // three tile clusters. Its depth is resolved by majority-vote of those 3 tiles.
+  _rebuildSpacers(tileSystem, getColor, heightMapMode) {
+    for (const [key, mesh] of this._spacerGroups) {
+      this.scene.remove(mesh);
+      if (mesh.geometry && !this._geoCache.has(mesh.geometry)) mesh.geometry.dispose();
+    }
+    this._spacerGroups.clear();
+
+    // Walk all tile cluster hexes and find adjacent spacer hexes
+    const seen = new Set();
+    for (const tile of tileSystem.tiles.values()) {
+      const clusterHexes = [{ q: tile.q, r: tile.r }, ...getNeighbors(tile.q, tile.r)];
+      for (const hex of clusterHexes) {
+        for (const nb of getNeighbors(hex.q, hex.r)) {
+          if (!isSpacerHex(nb.q, nb.r)) continue;
+          const key = nb.q + ',' + nb.r;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          this._buildSingleSpacer(nb, tileSystem, getColor, heightMapMode);
+        }
+      }
+    }
+  }
+
+  _buildSingleSpacer(hex, tileSystem, getColor, heightMapMode) {
+    const key = hex.q + ',' + hex.r;
+    const depth = tileSystem.getDepthAt(hex.q, hex.r);
+    const height = (depth - SEA_LEVEL_DEPTH) * HEIGHT_SCALE;
+    const extrude = Math.max(1, height - BASELINE);
+    const geo = this._getGeometry(extrude);
+
+    const color = heightMapMode
+      ? heightColor(height)
+      : cssToHex(getColor(hex.q, hex.r));
+
+    const mesh = new THREE.Mesh(geo, this._getMaterial(color));
+    const px = axialToPixel(hex.q, hex.r, this.hexSize);
+    mesh.position.set(px.x - this.offset.x, BASELINE, px.y - this.offset.z);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.userData.hex = { q: hex.q, r: hex.r };
+    mesh.userData.spacer = true;
+
+    this.scene.add(mesh);
+    this._spacerGroups.set(key, mesh);
+  }
 
   _buildTileGroup(tile, getColor, heightMapMode) {
     const group = new THREE.Group();
