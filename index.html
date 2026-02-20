@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <!--
-  Bitcraft City Planner v2.1.0
-  Added multi-tile select for depth
-  Added custom brush sizes
+  Bitcraft Settlement Planner v2.0.0
+  Axial-native coordinate system
+  Triangular lattice tile system with spacers
+  WebGL primary rendering (Three.js)
 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitcraft City Planner v1.3.0</title>
+    <title>Bitcraft Settlement Planner v2.0</title>
     <link rel="stylesheet" href="./css/index.css">
 </head>
 <body>
@@ -16,7 +17,7 @@
 <div id="palette">
     <div id="title">
         <div class="line1">BITCRAFT</div>
-        <div class="line2">City Planner</div>
+        <div class="line2">Settlement Planner</div>
     </div>
 
     <input type="text" id="planName" placeholder="ENTER PLAN DESIGNATION">
@@ -24,7 +25,8 @@
     <!-- Color Tools Card -->
     <div class="control-card">
         <div class="card-header">SPECTRUM</div>
-        <div id="colorGrid"></div>
+        <div class="card-body">
+        <div id="colorPalette"></div>
         <input type="color" id="customColorPicker" style="display: none;">
 
         <!-- Brush Size Controls -->
@@ -37,25 +39,25 @@
             </div>
             <div style="font-family: 'Rajdhani', sans-serif; font-size: 10px; color: var(--text-muted); margin-top: 5px; text-align: center;">Keyboard: +/-</div>
         </div>
+        </div>
     </div>
 
-    <!-- View Controls Card -->
-    <div class="control-card">
-        <div class="card-header">VIEWPORT</div>
-        <div id="zoomControls">
-            <button id="zoomOutBtn">-</button>
-            <span id="zoomLevel">18%</span>
-            <button id="zoomInBtn">+</button>
+    <!-- Grid Size Card -->
+    <div class="control-card collapsed">
+        <div class="card-header">GRID SIZE</div>
+        <div class="card-body">
+        <div id="gridSizePanel"></div>
+        <div id="gridStatsDisplay" style="font-family: 'Orbitron', monospace; font-size: 11px; color: var(--text-muted); margin-top: 8px;"></div>
         </div>
     </div>
 
     <!-- Mode Controls Card -->
-    <div class="control-card">
+    <div class="control-card collapsed">
         <div class="card-header">BUILD MODES</div>
-        <button id="largeHexModeBtn" class="mode-button">LARGE HEX MODE</button>
+        <div class="card-body">
         <button id="stampModeBtn" class="mode-button">BUILDING STAMPS</button>
 
-        <div id="stampsPanel">
+        <div id="stampsPanel" style="display: none;">
             <select id="stampCategory">
                 <option value="">SELECT CATEGORY</option>
             </select>
@@ -63,17 +65,18 @@
                 <option value="">SELECT BUILDING</option>
             </select>
             <div id="stampControls">
-                <button id="rotateStampBtn" title="Rotate stamp60°">⟲</button>
+                <button id="rotateStampBtn" title="Rotate stamp 60°">⟲</button>
                 <span id="stampInfo"></span>
             </div>
         </div>
+        </div>
     </div>
 
-    <!-- Large Tile System Card -->
-    <div class="control-card">
-        <div class="card-header">LARGE TILE SYSTEM</div>
+    <!-- Terrain Controls Card -->
+    <div class="control-card collapsed">
+        <div class="card-header">TERRAIN</div>
+        <div class="card-body">
         <button id="showBoundariesBtn" class="mode-button">SHOW BOUNDARIES</button>
-        <button id="debugCentersBtn" class="mode-button">LARGE TILE CENTERS</button>
         <button id="show3DViewBtn" class="mode-button">3D TERRAIN VIEW</button>
         <button id="terraformModeBtn" class="mode-button">TERRAFORM MODE</button>
         <button id="heightMapModeBtn" class="mode-button">HEIGHT MAP COLORS</button>
@@ -86,25 +89,29 @@
             <!-- Baseline Depth Control -->
             <div style="margin-bottom: 20px; padding: 12px; background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 6px;">
                 <div style="font-family: 'Rajdhani', sans-serif; font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">BASELINE DEPTH</div>
-                <div style="display: flex; align-items: flex-start; flex-direction:column;">
-                    <input type="number" id="baselineDepthInput" min="0" max="100" value="25" style="flex: 1; padding: 5px; background: var(--tertiary-bg); border: 1px solid var(--border-dim); border-radius: 4px; color: var(--accent-cyan); font-family: 'Orbitron', monospace; text-align: center; font-size: 14px;">
-                    <button id="applyBaselineBtn" style="padding: 5px 12px; background: var(--tertiary-bg); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); border-radius: 4px; cursor: pointer; font-family: 'Rajdhani', sans-serif; font-size: 12px; white-space: nowrap;">APPLY TO SELECTED</button>
+                <div style="display: flex; align-items: flex-start; flex-direction: column; gap: 6px;">
+                    <input type="number" id="baselineDepthInput" min="0" max="100" value="25"
+                           style="width: 100%; padding: 5px; background: var(--tertiary-bg); border: 1px solid var(--border-dim); border-radius: 4px; color: var(--accent-cyan); font-family: 'Orbitron', monospace; text-align: center; font-size: 14px;">
+                    <button id="applyBaselineBtn"
+                            style="padding: 5px 12px; background: var(--tertiary-bg); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); border-radius: 4px; cursor: pointer; font-family: 'Rajdhani', sans-serif; font-size: 12px; white-space: nowrap;">APPLY TO SELECTED</button>
                 </div>
                 <div style="font-family: 'Rajdhani', sans-serif; font-size: 10px; color: var(--text-muted); margin-top: 5px;">Ctrl+Click to multi-select tiles</div>
             </div>
 
             <div style="display: flex; gap: 15px; align-items: stretch;">
-                <!-- Vertical slider column -->
+                <!-- Vertical slider -->
                 <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
                     <div style="font-family: 'Rajdhani', sans-serif; font-size: 11px; color: var(--text-muted);">100</div>
-                    <input type="range" id="depthSlider" min="0" max="100" value="25" orient="vertical" style="writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 30px; height: 150px;">
+                    <input type="range" id="depthSlider" min="0" max="100" value="25" orient="vertical"
+                           style="writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 30px; height: 150px;">
                     <div style="font-family: 'Rajdhani', sans-serif; font-size: 11px; color: var(--text-muted);">0</div>
                 </div>
                 <!-- Info column -->
                 <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
                     <div>
                         <div style="font-family: 'Rajdhani', sans-serif; font-size: 13px; color: var(--text-primary); margin-bottom: 8px;">
-                            DEPTH: <input type="number" id="depthInput" min="0" max="100" value="25" style="width: auto; padding: 3px 5px; background: var(--tertiary-bg); border: 1px solid var(--border-dim); border-radius: 4px; color: var(--accent-cyan); font-family: 'Orbitron', monospace; text-align: center; font-size: 14px; font-weight: bold;">
+                            DEPTH: <input type="number" id="depthInput" min="0" max="100" value="25"
+                                          style="width: 60px; padding: 3px 5px; background: var(--tertiary-bg); border: 1px solid var(--border-dim); border-radius: 4px; color: var(--accent-cyan); font-family: 'Orbitron', monospace; text-align: center; font-size: 14px; font-weight: bold;">
                         </div>
                     </div>
                     <div style="font-family: 'Rajdhani', sans-serif; font-size: 11px; color: var(--text-muted); line-height: 1.6;">
@@ -115,106 +122,48 @@
                 </div>
             </div>
         </div>
-
-        <div style="font-family: 'Orbitron', monospace; font-size: 12px; margin-top: 10px;">
-            <div>SMALL TILES: <span id="tileCount">--</span></div>
-            <div>GRID SIZE: 100x100</div>
-            <div>TILE PATTERN: 7x14 MODULAR</div>
         </div>
     </div>
 
     <!-- File Controls Card -->
-    <div class="control-card">
+    <div class="control-card collapsed">
         <div class="card-header">FILE OPS</div>
+        <div class="card-body">
         <button id="saveJsonBtn" class="ctrl-button">SAVE PLAN</button>
         <button id="loadJsonBtn" class="ctrl-button">LOAD PLAN</button>
         <button id="resetBtn" class="ctrl-button">RESET MAP</button>
+        </div>
     </div>
 
-    <!-- Help Controls -->
+    <!-- Help -->
     <button id="guideBtn" class="ctrl-button">CONTROLS GUIDE</button>
 </div>
 
-<!-- Main Canvas Area -->
-<div id="svgContainer">
-    <svg id="hexMap"></svg>
+<!-- Main Viewport — SceneManager appends WebGL + CSS2D canvases here -->
+<div id="viewport"></div>
 
-    <!-- Three.js 3D View Container -->
-    <div id="threejsContainer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; pointer-events: auto;">
-        <canvas id="threejsCanvas"></canvas>
-
-        <!-- 3D Controls Overlay -->
-        <div id="threejsControls" style="position: absolute; top: 20px; right: 20px; background: rgba(26, 26, 36, 0.95); border: 2px solid rgba(0, 255, 255, 0.3); border-radius: 12px; padding: 15px; font-family: 'Orbitron', monospace; font-size: 12px; color: #00ffff;">
-            <div style="margin-bottom: 10px; font-weight: bold;">3D VIEW CONTROLS</div>
-            <div style="font-size: 11px; line-height: 1.6; color: #b0b0d0;">
-                <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 255, 255, 0.2);">
-                    <div style="font-weight: bold; color: #00ffff; margin-bottom: 4px;">MOUSE</div>
-                    <div>LEFT CLICK: Rotate</div>
-                    <div>RIGHT DRAG: Pan</div>
-                    <div>WHEEL: Zoom</div>
-                    <div id="terraformClickHint" style="display: none; color: #ff6b35; margin-top: 4px;">CLICK: Select Tile</div>
-                </div>
-                <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 255, 255, 0.2);">
-                    <div style="font-weight: bold; color: #00ffff; margin-bottom: 4px;">KEYBOARD</div>
-                    <div>WASD: Pan Camera</div>
-                    <div>Q/E: Rotate Left/Right</div>
-                    <div>R/F: Move Up/Down</div>
-                </div>
-                <div style="margin-bottom: 8px;">
-                    <div id="cameraInfo" style="font-size: 10px; color: #888;">
-                        <div>Distance: <span id="camDistance">--</span></div>
-                        <div>Angle: <span id="camAngle">--</span></div>
-                    </div>
-                </div>
-                <div>
-                    <button id="resetCamera" style="width: 100%; padding: 8px; background: var(--tertiary-bg); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); border-radius: 6px; cursor: pointer; font-family: 'Orbitron', monospace; font-size: 11px;">RESET VIEW</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Compass Indicator -->
-        <div id="compass" style="position: absolute; bottom: 270px; right: 30px; width: 80px; height: 80px; background: rgba(26, 26, 36, 0.9); border: 2px solid rgba(0, 255, 255, 0.3); border-radius: 50%; display: none; align-items: center; justify-content: center; font-family: 'Orbitron', monospace;">
-            <div style="position: relative; width: 100%; height: 100%;">
-                <div id="compassNeedle" style="position: absolute; top: 10%; left: 50%; transform: translateX(-50%) rotate(0deg); transform-origin: center 250%; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 30px solid #ff0000; transition: transform 0.3s ease;"></div>
-                <div style="position: absolute; top: 8px; left: 50%; transform: translateX(-50%); color: #00ffff; font-size: 10px; font-weight: bold;">N</div>
-                <div style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); color: #888; font-size: 10px;">S</div>
-                <div style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #888; font-size: 10px;">E</div>
-                <div style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: #888; font-size: 10px;">W</div>
-            </div>
-        </div>
-
-        <!-- Minimap -->
-        <div id="minimap" style="position: absolute; bottom: 60px; right: 20px; width: 180px; height: 180px; background: rgba(26, 26, 36, 0.95); border: 2px solid rgba(0, 255, 255, 0.3); border-radius: 8px; padding: 5px; display: none;">
-            <div style="font-family: 'Orbitron', monospace; font-size: 9px; color: #00ffff; margin-bottom: 3px; text-align: center;">MINIMAP</div>
-            <canvas id="minimapCanvas" width="170" height="160" style="display: block; background: rgba(0, 0, 0, 0.5); border-radius: 4px;"></canvas>
-        </div>
+<!-- Status Bar -->
+<div class="status-bar">
+    <div class="status-item">
+        <div class="status-dot"></div>
+        <span>SYSTEM READY</span>
     </div>
-
-
-    <!-- Status Bar -->
-    <div class="status-bar">
-        <div class="status-item">
-            <div class="status-dot"></div>
-            <span>SYSTEM READY</span>
-        </div>
-        <div class="status-item">
-            <span id="coordinates">COL: -- | ROW: --</span>
-        </div>
-        <div class="status-item">
-            <span id="tileInfo">TILE: --</span>
-        </div>
-        <div class="status-item">
-            <span id="mode-status">PAINT MODE</span>
-        </div>
+    <div class="status-item">
+        <span id="coordinatesDisplay">Q: -- | R: --</span>
+    </div>
+    <div class="status-item">
+        <span id="tileInfo">TILE: --</span>
+    </div>
+    <div class="status-item">
+        <span id="modeStatusDisplay">PAINT MODE</span>
     </div>
 </div>
 
 <!-- Hidden Elements -->
 <input type="file" id="jsonFileInput" accept=".json" style="display: none;">
-<input type="text" id="textInput">
 
 <!-- Controls Guide Modal -->
-<div id="guideOverlay" class="modal-overlay">
+<div id="guideOverlay" class="modal-overlay" style="display: none;">
     <div class="modal">
         <button id="closeGuide" class="modal-close">X</button>
         <h1>COMMAND INTERFACE</h1>
@@ -228,21 +177,21 @@
                 <div><strong style="color: var(--accent-cyan);">DELETE/BACKSPACE:</strong> Delete Building</div>
                 <div><strong style="color: var(--accent-cyan);">DOUBLE CLICK:</strong> Add Text</div>
                 <div><strong style="color: var(--accent-cyan);">ESCAPE:</strong> Deselect</div>
-                <div><strong style="color: var(--accent-cyan);">MIDDLE DRAG:</strong> Pan View</div>
+                <div><strong style="color: var(--accent-cyan);">RIGHT DRAG:</strong> Orbit (3D)</div>
                 <div><strong style="color: var(--accent-cyan);">MOUSE WHEEL:</strong> Zoom</div>
                 <div><strong style="color: var(--accent-cyan);">Q KEY:</strong> Rotate Stamp CCW</div>
-                <div><strong style="color: var(--accent-cyan);">E KEY:</strong> Rotate Stamp CW</div>
-                <div><strong style="color: var(--accent-cyan);">R KEY:</strong> Rotate Stamp CW</div>
+                <div><strong style="color: var(--accent-cyan);">E/R KEY:</strong> Rotate Stamp CW</div>
+                <div><strong style="color: var(--accent-cyan);">+/- KEYS:</strong> Brush Size</div>
             </div>
         </div>
 
         <h3 style="color: var(--accent-orange); font-family: 'Orbitron', monospace;">SYSTEM FEATURES</h3>
-        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">Large Hex Mode:</strong> Deploy paint in 7-hex clusters (center + 6 neighbors).</p>
-        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">Large Tile System:</strong> Visualize terraforming boundaries and centers on the 7x14 modular grid.</p>
-        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">Terraform Mode:</strong> Click on large tiles to adjust their depth (0-100). Sea level is 25.</p>
-        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">3D Terrain View:</strong> Toggle to see elevation differences in a tilted perspective view.</p>
-        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">Building Stamps:</strong> Place pre-configured structures with rotation support.</p>
-        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">Border Pattern:</strong> Mark territorial boundaries with specialized markers.</p>
+        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">Grid Size:</strong> Configure grid bounds via radius, rectangle, or custom axial ranges.</p>
+        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">Tile System:</strong> Triangular lattice with spacer tiles matching in-game terraforming.</p>
+        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">Terraform Mode:</strong> Click tiles to adjust depth (0-100). Sea level is 25.</p>
+        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">3D Terrain View:</strong> Toggle perspective view with extruded terrain.</p>
+        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">Building Stamps:</strong> Place canonical game buildings with rotation support.</p>
+        <p style="font-family: 'Rajdhani', sans-serif; font-size: 15px;"><strong style="color: var(--accent-cyan);">Height Map:</strong> Color terrain by elevation for visual depth reference.</p>
     </div>
 </div>
 

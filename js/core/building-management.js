@@ -85,7 +85,7 @@ export function showBuildingInfo(building) {
   document.getElementById('selectedBuildingName').textContent = building.stampName;
   document.getElementById('selectedBuildingId').textContent = building.id.split('_')[1] + '...' + building.id.slice(-6);
   document.getElementById('selectedBuildingCenter').textContent = `[${building.centerCol}, ${building.centerRow}]`;
-  document.getElementById('selectedBuildingRotation').textContent = `${building.rotation * 60}Ã‚Â°`;
+  document.getElementById('selectedBuildingRotation').textContent = `${building.rotation * 60}°`;
   document.getElementById('selectedBuildingTiles').textContent = building.getTileIds().join(', ');
 
   panel.style.display = 'block';

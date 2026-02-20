@@ -4,7 +4,7 @@
 
 import { AppState } from './state.js';
 import { clearBuildingHighlight, hideBuildingInfo } from './building-management.js';
-import { updateTileMesh, renderBuildingMesh, removeBuildingMesh } from './threejs-api.js';
+import { updateTileMesh, renderBuildingMesh, removeBuildingMesh } from '../threejs-api.js';
 
 /**
  * Save plan as JSON file
