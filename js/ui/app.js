@@ -23,6 +23,7 @@ import CameraController from '../rendering/CameraController.js';
 import TerrainRenderer from '../rendering/TerrainRenderer.js';
 import BuildingRenderer from '../rendering/BuildingRenderer.js';
 import LabelRenderer from '../rendering/LabelRenderer.js';
+import HoverPreviewRenderer from '../rendering/HoverPreviewRenderer.js';
 
 const DEFAULT_HEX_COLOR = '#2a2838';
 const DEFAULT_DEPTH = 25;
@@ -59,6 +60,7 @@ export default class App {
     this.terrain = null;
     this.buildingRenderer = null;
     this.labels = null;
+    this.hoverPreview = null;
 
     this._nextBuildingId = 1;
     this._callbacks = {};
@@ -84,12 +86,14 @@ export default class App {
     this.terrain = new TerrainRenderer(this.scene.scene, HEX_SIZE);
     this.buildingRenderer = new BuildingRenderer(this.scene.scene, HEX_SIZE);
     this.labels = new LabelRenderer(this.scene.scene, HEX_SIZE);
+    this.hoverPreview = new HoverPreviewRenderer(this.scene.scene, HEX_SIZE);
 
     // Center offset so (0,0) is screen center
     const centerPx = this._computeCenterOffset();
     this.terrain.setOffset(centerPx.x, centerPx.z);
     this.buildingRenderer.setOffset(centerPx.x, centerPx.z);
     this.labels.setOffset(centerPx.x, centerPx.z);
+    this.hoverPreview.setOffset(centerPx.x, centerPx.z);
     this.labels.setTerrainHeightFn((q, r) => this._terrainHeight(q, r));
 
     // Input — InteractionManager reads renderer.domElement from sceneManager
@@ -101,6 +105,7 @@ export default class App {
     this.interaction.onHexDrag = (q, r, e) => this._onHexDrag(q, r, e);
     this.interaction.onHexMove = (q, r) => this._onHexHover(q, r);
     this.interaction.onDoubleClick = (q, r) => this._onDoubleClick(q, r);
+    this.interaction.onLeave = () => this.hoverPreview.clear();
 
     // Initial full render via HexGrid's dirty tracking
     this.hexGrid.rebuild(this.grid);
@@ -121,6 +126,7 @@ export default class App {
     this.terrain.setOffset(centerPx.x, centerPx.z);
     this.buildingRenderer.setOffset(centerPx.x, centerPx.z);
     this.labels.setOffset(centerPx.x, centerPx.z);
+    this.hoverPreview.setOffset(centerPx.x, centerPx.z);
     this.labels.refreshPositions();
 
     this.hexGrid.rebuild(this.grid);
@@ -381,6 +387,29 @@ export default class App {
 
   _onHexHover(q, r) {
     this._emit('hexHover', { q, r });
+    this._updatePreview(q, r);
+  }
+
+  // Show what will happen if you click here.
+  // Paint mode: colored footprint matching brush size.
+  // Stamp mode: building shape at current rotation.
+  // Terraform: no preview (tile selection is click-based).
+  _updatePreview(q, r) {
+    if (this.mode === 'terraform') {
+      this.hoverPreview.clear();
+      return;
+    }
+
+    if (this.mode === 'stamp' && this.selectedStampId) {
+      const hitbox = this.catalog.getRotatedHitbox(this.selectedStampId, this.stampRotation);
+      const building = this.catalog.get(this.selectedStampId);
+      this.hoverPreview.updateStamp(q, r, hitbox, this._buildingColor(building));
+      return;
+    }
+
+    // Paint mode (including eraser)
+    const color = this.currentColor === 'eraser' ? DEFAULT_HEX_COLOR : this.currentColor;
+    this.hoverPreview.update(q, r, color, this.brushSize);
   }
 
   _onDoubleClick(q, r) {
