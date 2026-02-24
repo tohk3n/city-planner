@@ -5,6 +5,7 @@
 
 import App from './ui/app.js';
 import GridSizeUI from './ui/grid-size-ui.js';
+import ColorPicker from './ui/color-picker.js';
 import { DEFAULT_COLOR } from './core/grid.js';
 import * as undo from './core/undo-stack.js';
 
@@ -64,17 +65,21 @@ function wireAccordionCards() {
   }
 }
 
+// Color picker instance - created in wireColorPalette, needs to be
+// accessible to syncModeFromPanel so it closes on panel switch.
+let colorPicker = null;
+
 // The open card determines the active mode.
 // Boundaries auto-enable on terraform entry but don't auto-disable on exit.
 function syncModeFromPanel() {
   const open = document.querySelector('.control-card:not(.collapsed)');
   const panel = open?.dataset.panel;
 
+  if (panel !== '1' && colorPicker?.isOpen) colorPicker.close();
+
   if (panel === '2') {
-    // Buildings card - enter stamp mode
     app.mode = 'stamp';
   } else if (panel === '3') {
-    // Terrain card - enter terraform mode + auto-enable boundaries
     app.mode = 'terraform';
     if (!app.showBoundaries) {
       app.showBoundaries = true;
@@ -83,7 +88,6 @@ function syncModeFromPanel() {
       if (bBtn) bBtn.classList.add('active');
     }
   } else {
-    // Palette, grid, or anything else - back to paint
     app.mode = 'paint';
   }
 
@@ -172,6 +176,16 @@ function wireColorPalette() {
   const palette = document.getElementById('colorPalette');
   if (!palette) return;
 
+  // Inline HSL picker - lives below the swatch grid, hidden until toggled.
+  // Parented to the card body (not the grid) so it doesn't become a grid item.
+  const cardBody = palette.closest('.card-body');
+  const customSwatch = palette.querySelector('[data-color="custom-color"]');
+  const picker = new ColorPicker(cardBody || palette, (hex) => {
+    app.currentColor = hex;
+    if (customSwatch) customSwatch.style.background = hex;
+  });
+  colorPicker = picker;
+
   palette.addEventListener('click', (e) => {
     const swatch = e.target.closest('[data-color]');
     if (!swatch) return;
@@ -179,15 +193,18 @@ function wireColorPalette() {
     const color = swatch.dataset.color;
 
     if (color === 'custom-color') {
-      const picker = document.getElementById('customColorPicker');
-      if (picker) {
-        picker.click();
-        picker.addEventListener('input', (ev) => {
-          app.currentColor = ev.target.value;
-        }, { once: true });
+      picker.toggle(app.currentColor);
+      if (picker.isOpen) {
+        palette.querySelectorAll('[data-color]').forEach(s => s.classList.remove('selected-swatch'));
+        swatch.classList.add('selected-swatch');
+        app.mode = 'paint';
+        updateModeDisplay();
       }
       return;
     }
+
+    // Any other swatch closes the picker
+    if (picker.isOpen) picker.close();
 
     if (color === 'border-pattern') {
       app.currentColor = 'white';
@@ -202,7 +219,6 @@ function wireColorPalette() {
       const header = paletteCard.querySelector('.card-header');
       if (header) header.click();
     } else {
-      // Already on palette - just make sure we're in paint mode
       app.mode = 'paint';
       updateModeDisplay();
     }

@@ -204,13 +204,44 @@ export default class ViewportHUD {
   }
 }
 
-// Simplified depth palette for the minimap overview.
+// Depth color table matching app.js - 101 entries with odd/even banding.
+const DEPTH_CSS = buildDepthCSS();
+
+function buildDepthCSS() {
+  const table = new Array(101);
+  for (let d = 0; d <= 100; d++) {
+    let h, s, l;
+    if (d <= 25) {
+      const wt = d / 25;
+      h = 270 - wt * 150;
+      s = 0.8 + wt * 0.15;
+      l = 0.18 + wt * 0.22;
+    } else {
+      const lt = (d - 25) / 75;
+      h = 120 - lt * 170;
+      if (h < 0) h += 360;
+      s = 0.9 - lt * 0.1;
+      l = 0.38 + lt * 0.15;
+    }
+    if (d % 2 === 1) l += 0.06;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l - c / 2;
+    let r, g, b;
+    if (h < 60)       { r = c; g = x; b = 0; }
+    else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; }
+    else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; }
+    else               { r = c; g = 0; b = x; }
+    const ri = Math.round((r + m) * 255);
+    const gi = Math.round((g + m) * 255);
+    const bi = Math.round((b + m) * 255);
+    table[d] = '#' + ((1 << 24) | (ri << 16) | (gi << 8) | bi).toString(16).slice(1);
+  }
+  return table;
+}
+
 function depthColor(depth) {
-  if (depth < 20) return '#0066cc';
-  if (depth < 25) return '#0099ff';
-  if (depth < 30) return '#44aa44';
-  if (depth < 45) return '#66cc44';
-  if (depth < 65) return '#cccc00';
-  if (depth < 85) return '#ff9900';
-  return '#cc3300';
+  return DEPTH_CSS[Math.max(0, Math.min(100, Math.round(depth)))];
 }

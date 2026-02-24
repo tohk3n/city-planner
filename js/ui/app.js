@@ -998,36 +998,58 @@ export default class App {
 
 }
 
-// --- Depth color gradient ---
-// Maps tile depth (0-100) to a color. Sea level = 25.
-// Matches the in-game terraform color convention.
+// --- Depth color table ---
+// 101 precomputed colors (depth 0-100), one per integer.
+// The key insight: hue alone changes too slowly per step (~2 deg) to be
+// visible. So we also alternate lightness on odd/even depths to create
+// visible banding, and use a wider hue sweep with higher saturation.
 
-const DEPTH_GRADIENT = [
-  { stop: 0,   color: new THREE.Color(0x003366) }, // deep ocean
-  { stop: 15,  color: new THREE.Color(0x0066cc) }, // water
-  { stop: 23,  color: new THREE.Color(0x0099ff) }, // shallow
-  { stop: 25,  color: new THREE.Color(0x44aa44) }, // sea level (green)
-  { stop: 30,  color: new THREE.Color(0x66cc44) }, // low land
-  { stop: 45,  color: new THREE.Color(0xcccc00) }, // mid
-  { stop: 60,  color: new THREE.Color(0xff9900) }, // high
-  { stop: 80,  color: new THREE.Color(0xff3300) }, // mountain
-  { stop: 100, color: new THREE.Color(0xcc0000) }, // peak
-];
+const DEPTH_TABLE = buildDepthTable();
 
-const _lerpColor = new THREE.Color();
+function buildDepthTable() {
+  const table = new Array(101);
+  for (let d = 0; d <= 100; d++) {
+    let h, s, l;
+    if (d <= 25) {
+      // Water: purple 270 -> cyan 180 -> green 120
+      const wt = d / 25;
+      h = 270 - wt * 150;
+      s = 0.8 + wt * 0.15;
+      l = 0.18 + wt * 0.22;
+    } else {
+      // Land: green 120 -> yellow 60 -> red 0 -> magenta 310
+      const lt = (d - 25) / 75;
+      h = 120 - lt * 170;
+      if (h < 0) h += 360;
+      s = 0.9 - lt * 0.1;
+      l = 0.38 + lt * 0.15;
+    }
+    // Odd/even lightness banding - enough to see per-step difference
+    if (d % 2 === 1) l += 0.06;
+    const [r, g, b] = hslToRgb255(h, s, l);
+    table[d] = (r << 16) | (g << 8) | b;
+  }
+  return table;
+}
+
+function hslToRgb255(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r, g, b;
+  if (h < 60)       { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else               { r = c; g = 0; b = x; }
+  return [
+    Math.round((r + m) * 255),
+    Math.round((g + m) * 255),
+    Math.round((b + m) * 255),
+  ];
+}
 
 function depthToColor(depth) {
-  const d = Math.max(0, Math.min(100, depth));
-
-  // Find the two gradient stops we're between
-  for (let i = 0; i < DEPTH_GRADIENT.length - 1; i++) {
-    const lo = DEPTH_GRADIENT[i];
-    const hi = DEPTH_GRADIENT[i + 1];
-    if (d >= lo.stop && d <= hi.stop) {
-      const t = (d - lo.stop) / (hi.stop - lo.stop);
-      _lerpColor.copy(lo.color).lerp(hi.color, t);
-      return _lerpColor.getHex();
-    }
-  }
-  return DEPTH_GRADIENT[DEPTH_GRADIENT.length - 1].color.getHex();
+  return DEPTH_TABLE[Math.max(0, Math.min(100, Math.round(depth)))];
 }

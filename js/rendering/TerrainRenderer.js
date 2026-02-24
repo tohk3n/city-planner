@@ -24,17 +24,43 @@ const BASELINE = -80;
 const SEA_LEVEL_DEPTH = 25;
 const DEFAULT_COLOR = 0x2a2838;
 
-// Height map gradient (depth-normalized 0..1 → color)
-const HEIGHT_COLORS = [
-  [0.00, 0x0066cc],  // deep water
-  [0.25, 0x0099ff],
-  [0.40, 0x00ccff],
-  [0.50, 0x66ff66],  // land
-  [0.60, 0xffff00],
-  [0.70, 0xff9900],
-  [0.85, 0xff3300],  // peaks
-  [1.00, 0xff3300],
-];
+// Per-depth color table (0-100). Same HSL sweep + odd/even banding
+// as app.js so heightmap looks identical in 2D overlay and 3D terrain.
+const DEPTH_COLOR_TABLE = buildDepthColorTable();
+
+function buildDepthColorTable() {
+  const table = new Array(101);
+  for (let d = 0; d <= 100; d++) {
+    let h, s, l;
+    if (d <= 25) {
+      const wt = d / 25;
+      h = 270 - wt * 150;
+      s = 0.8 + wt * 0.15;
+      l = 0.18 + wt * 0.22;
+    } else {
+      const lt = (d - 25) / 75;
+      h = 120 - lt * 170;
+      if (h < 0) h += 360;
+      s = 0.9 - lt * 0.1;
+      l = 0.38 + lt * 0.15;
+    }
+    if (d % 2 === 1) l += 0.06;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l - c / 2;
+    let r, g, b;
+    if (h < 60)       { r = c; g = x; b = 0; }
+    else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; }
+    else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; }
+    else               { r = c; g = 0; b = x; }
+    table[d] = (Math.round((r + m) * 255) << 16)
+             | (Math.round((g + m) * 255) << 8)
+             |  Math.round((b + m) * 255);
+  }
+  return table;
+}
 
 export default class TerrainRenderer {
   constructor(scene, hexSize) {
@@ -119,13 +145,11 @@ export default class TerrainRenderer {
       const tile = tileSystem.tiles.get(key);
       if (!tile) continue;
 
-      const height = (tile.depth - SEA_LEVEL_DEPTH) * HEIGHT_SCALE;
-
       for (const child of group.children) {
         if (!child.isMesh || !child.userData.hex) continue;
         const { q, r } = child.userData.hex;
         const color = heightMapMode
-          ? heightColor(height)
+          ? depthColor(tile.depth)
           : cssToHex(getColor(q, r));
         child.material = this._getMaterial(color);
       }
@@ -136,9 +160,8 @@ export default class TerrainRenderer {
       if (!mesh.isMesh || !mesh.userData.hex) continue;
       const { q, r } = mesh.userData.hex;
       const depth = tileSystem.getDepthAt(q, r);
-      const height = (depth - SEA_LEVEL_DEPTH) * HEIGHT_SCALE;
       const color = heightMapMode
-        ? heightColor(height)
+        ? depthColor(depth)
         : cssToHex(getColor(q, r));
       mesh.material = this._getMaterial(color);
     }
@@ -208,7 +231,7 @@ export default class TerrainRenderer {
     const geo = this._getGeometry(extrude);
 
     const color = heightMapMode
-      ? heightColor(height)
+      ? depthColor(depth)
       : cssToHex(getColor(hex.q, hex.r));
 
     const mesh = new THREE.Mesh(geo, this._getMaterial(color));
@@ -236,7 +259,7 @@ export default class TerrainRenderer {
     for (const hex of hexes) {
       const px = axialToPixel(hex.q, hex.r, this.hexSize);
       const color = heightMapMode
-        ? heightColor(height)
+        ? depthColor(depth)
         : cssToHex(getColor(hex.q, hex.r));
 
       const mesh = new THREE.Mesh(geo, this._getMaterial(color));
@@ -328,11 +351,6 @@ function cssToHex(css) {
   catch { return DEFAULT_COLOR; }
 }
 
-function heightColor(height) {
-  const t = (height - BASELINE) / (-BASELINE + 75 * HEIGHT_SCALE);
-  const clamped = Math.max(0, Math.min(1, t));
-  for (let i = HEIGHT_COLORS.length - 1; i >= 0; i--) {
-    if (clamped >= HEIGHT_COLORS[i][0]) return HEIGHT_COLORS[i][1];
-  }
-  return HEIGHT_COLORS[0][1];
-}
+function depthColor(depth) {
+  return DEPTH_COLOR_TABLE[Math.max(0, Math.min(100, Math.round(depth)))];
+} 

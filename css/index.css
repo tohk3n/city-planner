@@ -460,6 +460,61 @@ html, body {
   border: 2px dashed var(--fg2);
 }
 
+/* ═══ INLINE COLOR PICKER ═══ */
+
+.cpk {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 2px;
+}
+
+.cpk-canvases {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.cpk-sl {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: crosshair;
+}
+
+.cpk-hue {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: row-resize;
+}
+
+.cpk-bottom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+.cpk-hash {
+  color: var(--fg2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.cpk-hex {
+  width: 72px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cpk-preview {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
 /* ═══ BRUSH SIZE (in palette header) ═══ */
 
 .brush-control {
