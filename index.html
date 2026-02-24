@@ -129,15 +129,15 @@
   <footer class="bar-bottom" role="status" aria-label="Status bar" aria-live="polite">
     <span id="modeStatusDisplay" class="status-mode">PAINT</span>
     <div class="status-seg">
+      <button id="show3DViewBtn" class="term-btn toggle-sm status-btn" tabindex="0">3d <kbd>v</kbd></button>
+    </div>
+    <div class="status-seg">
       <span id="coordinatesDisplay">Q: -- | R: --</span>
     </div>
     <div class="status-seg">
       <span id="tileInfo">TILE: --</span>
     </div>
     <span class="status-spacer"></span>
-    <div class="status-seg">
-      <button id="show3DViewBtn" class="term-btn toggle-sm status-btn" tabindex="0">3d <kbd>v</kbd></button>
-    </div>
     <div class="status-seg status-keyhint">
       <kbd>?</kbd> keys
     </div>
@@ -424,6 +424,7 @@
       'b': 'showBoundariesBtn',
       'v': 'show3DViewBtn',
       'h': 'heightMapModeBtn',
+      '?': 'guideBtn',
     };
 
     const btnId = toggleMap[e.key.toLowerCase()];

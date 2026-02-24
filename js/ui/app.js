@@ -24,6 +24,7 @@ import TerrainRenderer from '../rendering/TerrainRenderer.js';
 import BuildingRenderer from '../rendering/BuildingRenderer.js';
 import LabelRenderer from '../rendering/LabelRenderer.js';
 import HoverPreviewRenderer from '../rendering/HoverPreviewRenderer.js';
+import ViewportHUD from '../rendering/ViewportHUD.js';
 import * as undo from '../core/undo-stack.js';
 
 // Pull from grid.js so eraser and "empty" always agree with the data layer
@@ -63,6 +64,7 @@ export default class App {
     this.buildingRenderer = null;
     this.labels = null;
     this.hoverPreview = null;
+    this.hud = null;
 
     this._nextBuildingId = 1;
     this._callbacks = {};
@@ -90,6 +92,7 @@ export default class App {
     this.buildingRenderer = new BuildingRenderer(this.scene.scene, HEX_SIZE);
     this.labels = new LabelRenderer(this.scene.scene, HEX_SIZE);
     this.hoverPreview = new HoverPreviewRenderer(this.scene.scene, HEX_SIZE);
+    this.hud = new ViewportHUD(container, HEX_SIZE);
 
     // Center offset so (0,0) is screen center
     const centerPx = this._computeCenterOffset();
@@ -555,13 +558,12 @@ export default class App {
       this.scene.setMode('perspective');
       this._rebuildTerrain();
       this._rebuildBuildings();
+      this.hud.show();
     } else {
       this.scene.setMode('ortho');
       this.terrain.clear();
-      // Rebuild buildings so they sit flat at y=0 for the ortho view.
-      // Without this they vanish — the flat hex grid doesn't know about
-      // building colors, only BuildingRenderer draws them.
       this._rebuildBuildings();
+      this.hud.hide();
     }
     this._emit('viewModeChange', on);
   }
