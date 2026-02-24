@@ -347,16 +347,7 @@ export function setupEventListeners() {
   document.getElementById('loadJsonBtn').addEventListener('click', () => AppState.dom.jsonFileInput.click());
   document.getElementById('resetBtn').addEventListener('click', resetMap);
 
-  // Modals
-  document.getElementById('guideBtn').addEventListener('click', () => {
-    document.getElementById('guideOverlay').style.display = 'flex';
-  });
-  document.getElementById('closeGuide').addEventListener('click', () => {
-    document.getElementById('guideOverlay').style.display = 'none';
-  });
-  document.getElementById('guideOverlay').addEventListener('click', (e) => {
-    if (e.target.id === 'guideOverlay') e.target.style.display = 'none';
-  });
+  // Guide modal — handled by js/ui/walkthrough.js
 
   // Custom color picker
   AppState.dom.customColorPicker.addEventListener('change', (e) => {

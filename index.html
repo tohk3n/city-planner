@@ -161,54 +161,247 @@
 <!-- Hidden file input -->
 <input type="file" id="jsonFileInput" accept=".json" style="display:none;">
 
-<!-- Controls Guide Modal -->
-<div id="guideOverlay" class="modal-overlay" style="display:none;">
-  <div class="modal">
-    <button id="closeGuide" class="modal-close" aria-label="Close guide">×</button>
-    <h1>controls</h1>
-    <div class="guide-content">
-      <div class="guide-section">
-        <div class="guide-title">navigation</div>
-        <div class="guide-row"><kbd>click</kbd> paint / place</div>
-        <div class="guide-row"><kbd>drag</kbd> paint area</div>
-        <div class="guide-row"><kbd>middle-drag</kbd> pan view</div>
-        <div class="guide-row"><kbd>scroll</kbd> zoom</div>
-        <div class="guide-row"><kbd>dbl-click</kbd> add label</div>
+<!-- Walkthrough Guide Modal -->
+<div id="walkthroughOverlay" class="wt-overlay" style="display:none;">
+  <div class="wt-modal" role="dialog" aria-label="Getting started guide">
+    <div class="wt-header">
+      <span class="wt-title">getting started</span>
+      <button class="wt-close" id="wtClose" aria-label="Close guide">&times;</button>
+    </div>
+    <div class="wt-progress" id="wtProgress"></div>
+    <div class="wt-body" id="wtBody">
+
+      <!-- PAGE 0: Welcome -->
+      <div class="wt-page" data-page="0">
+        <div class="wt-page-title">welcome to bsp</div>
+        <p class="wt-text">
+          The <strong>Bitcraft Settlement Planner</strong> lets you design settlement layouts
+          on a hex grid before building them in-game. Paint terrain, place buildings with
+          accurate footprints, terraform elevation, and preview everything in 3D.
+        </p>
+        <div class="wt-diagram">
+          <div class="label">the interface</div>
+          <pre style="text-align:left;display:inline-block;color:var(--fg1);font-size:10px;line-height:1.6;">
+&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&#9474; bsp &#9474; plan name      grid &#183; tiles &#183; &#9474;  top bar
+&#9500;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9508;
+&#9474; palette  &#9474;                          &#9474;
+&#9474; modes    &#9474;       viewport           &#9474;
+&#9474; buildings&#9474;       (hex grid)         &#9474;
+&#9474; terrain  &#9474;                          &#9474;
+&#9474; file ops &#9474;                          &#9474;
+&#9500;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9508;
+&#9474; PAINT  Q: -- | R: --   TILE: --    &#9474;  status bar
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</pre>
+        </div>
+        <p class="wt-text">
+          The left panel has collapsible sections &mdash; click a header or press
+          <kbd>1</kbd>&ndash;<kbd>5</kbd> to jump to a panel. The status bar at the bottom
+          always shows your current mode and cursor coordinates.
+        </p>
       </div>
-      <div class="guide-section">
-        <div class="guide-title">stamps</div>
-        <div class="guide-row"><kbd>q</kbd> rotate CCW</div>
-        <div class="guide-row"><kbd>e</kbd> / <kbd>r</kbd> rotate CW</div>
-        <div class="guide-row"><kbd>shift+click</kbd> select building</div>
-        <div class="guide-row"><kbd>shift+click</kbd> reposition (with sel.)</div>
-        <div class="guide-row"><kbd>del</kbd> delete selected</div>
+
+      <!-- PAGE 1: Navigation -->
+      <div class="wt-page" data-page="1">
+        <div class="wt-page-title">moving around</div>
+        <p class="wt-text">The viewport is your workspace. Navigate with the mouse:</p>
+        <dl class="wt-kv">
+          <dt><kbd>middle-drag</kbd></dt>
+          <dd>pan the view</dd>
+          <dt><kbd>scroll</kbd></dt>
+          <dd>zoom in/out</dd>
+          <dt><kbd>i</kbd></dt>
+          <dd>invert scroll direction</dd>
+        </dl>
+        <p class="wt-text">
+          The grid starts at 100&times;100 hexes. You can resize it in the
+          <span class="hl-info">grid</span> panel if you need more or less space.
+          Coordinates are shown in the status bar as axial Q, R &mdash; the same
+          system the game uses internally.
+        </p>
+        <div class="wt-tip">
+          If you get lost, zoom out with scroll to find your bearings.
+        </div>
       </div>
-      <div class="guide-section">
-        <div class="guide-title">tools</div>
-        <div class="guide-row"><kbd>+</kbd> / <kbd>-</kbd> brush size</div>
-        <div class="guide-row"><kbd>ctrl+click</kbd> multi-select tiles</div>
-        <div class="guide-row"><kbd>esc</kbd> deselect / exit mode</div>
-        <div class="guide-row"><kbd>i</kbd> invert zoom scroll</div>
+
+      <!-- PAGE 2: Painting -->
+      <div class="wt-page" data-page="2">
+        <div class="wt-page-title">painting terrain</div>
+        <p class="wt-text">
+          This is the default mode. Pick a color from the <span class="hl">palette</span>
+          and click or drag on the grid to paint hexes. Mark out residential areas, farms,
+          roads, districts &mdash; whatever your layout needs.
+        </p>
+        <dl class="wt-kv">
+          <dt><kbd>click</kbd></dt><dd>paint a hex</dd>
+          <dt><kbd>drag</kbd></dt><dd>paint an area</dd>
+          <dt><kbd>+</kbd> / <kbd>-</kbd></dt><dd>brush size</dd>
+          <dt><kbd>dbl-click</kbd></dt><dd>add a text label</dd>
+        </dl>
+        <p class="wt-text">
+          The palette has 12 presets, a <strong>custom color</strong> swatch (the rainbow one),
+          and an <strong>eraser</strong> (checkerboard) that resets hexes to default.
+          Brush size in the palette header controls how many hexes you paint at once.
+        </p>
+        <div class="wt-tip">
+          The border/dashed swatch renders as a dashed outline &mdash; useful for marking
+          claim edges or settlement boundaries.
+        </div>
       </div>
-      <div class="guide-section">
-        <div class="guide-title">modes</div>
-        <div class="guide-row"><kbd>x</kbd> toggle stamp mode</div>
-        <div class="guide-row"><kbd>t</kbd> toggle terraform mode</div>
-        <div class="guide-row"><kbd>b</kbd> toggle boundaries</div>
-        <div class="guide-row"><kbd>v</kbd> toggle 3d view</div>
-        <div class="guide-row"><kbd>h</kbd> toggle heightmap</div>
+
+      <!-- PAGE 3: Building Placement -->
+      <div class="wt-page" data-page="3">
+        <div class="wt-page-title">placing buildings</div>
+        <p class="wt-text">
+          Toggle <span class="hl-stamp">stamp mode</span> with the button or <kbd>x</kbd>.
+          The buildings panel opens with a category dropdown and building selector covering
+          all ~600 buildings from the game.
+        </p>
+        <p class="wt-text">
+          Select a building, then click on the grid to place it. The hover preview shows the
+          <strong>exact hitbox shape</strong> from game data for accurate collision planning.
+        </p>
+        <dl class="wt-kv">
+          <dt><kbd>x</kbd></dt><dd>toggle stamp mode</dd>
+          <dt><kbd>q</kbd></dt><dd>rotate CCW (60&deg;)</dd>
+          <dt><kbd>e</kbd> / <kbd>r</kbd></dt><dd>rotate CW (60&deg;)</dd>
+        </dl>
+        <div class="wt-tip">
+          Each placement is independent &mdash; place the same building multiple times.
+          Switch buildings from the dropdown without leaving stamp mode.
+        </div>
       </div>
-      <div class="guide-section">
-        <div class="guide-title">panels</div>
-        <div class="guide-row"><kbd>1</kbd>–<kbd>5</kbd> focus panel</div>
-        <div class="guide-row"><kbd>tab</kbd> next control</div>
-        <div class="guide-row"><kbd>space</kbd> / <kbd>enter</kbd> activate</div>
+
+      <!-- PAGE 4: Managing Buildings -->
+      <div class="wt-page" data-page="4">
+        <div class="wt-page-title">selecting &amp; moving buildings</div>
+        <p class="wt-text">Once buildings are placed, you can select, move, rotate, and delete them:</p>
+        <dl class="wt-kv">
+          <dt><kbd>shift+click</kbd></dt><dd>select a building (highlights yellow)</dd>
+          <dt><kbd>shift+click</kbd></dt><dd>on empty space &mdash; reposition selected building</dd>
+          <dt><kbd>q</kbd> / <kbd>e</kbd></dt><dd>rotate selected building in-place</dd>
+          <dt><kbd>del</kbd></dt><dd>delete selected building</dd>
+          <dt><kbd>esc</kbd></dt><dd>deselect / cancel</dd>
+        </dl>
+        <div class="wt-tip">
+          The reposition preview shows the footprint at the cursor so you can see
+          exactly where it will land before committing.
+        </div>
+      </div>
+
+      <!-- PAGE 5: Terraform -->
+      <div class="wt-page" data-page="5">
+        <div class="wt-page-title">terraforming</div>
+        <p class="wt-text">
+          Toggle <span class="hl-terra">terraform mode</span> with the button or <kbd>t</kbd>.
+          This mirrors the in-game elevation system &mdash; select 7-hex tile clusters and set
+          their depth (0&ndash;100). Boundary lines appear automatically.
+        </p>
+        <dl class="wt-kv">
+          <dt><kbd>t</kbd></dt><dd>toggle terraform mode</dd>
+          <dt><kbd>click</kbd></dt><dd>select a tile cluster</dd>
+          <dt><kbd>ctrl+click</kbd></dt><dd>multi-select tiles</dd>
+          <dt><kbd>esc</kbd></dt><dd>clear selection</dd>
+        </dl>
+        <p class="wt-text">
+          Use the <strong>depth slider</strong> in the terrain panel to set elevation for all
+          selected tiles. The <strong>baseline depth</strong> sets a default for new tiles.
+          <strong>Spacer tiles</strong> between clusters inherit depth from neighbors via
+          majority-vote &mdash; just like in-game.
+        </p>
+        <div class="wt-tip">
+          Terraforming is optional. If you just want a flat layout with buildings, skip it.
+        </div>
+      </div>
+
+      <!-- PAGE 6: 3D View -->
+      <div class="wt-page" data-page="6">
+        <div class="wt-page-title">3d visualization</div>
+        <p class="wt-text">
+          Press <kbd>3</kbd> or click <strong>3d view</strong> to switch to perspective rendering.
+          Terrain extrudes based on depth values, and buildings render as colored prisms.
+        </p>
+        <dl class="wt-kv">
+          <dt><kbd>3</kbd></dt><dd>toggle 3D view</dd>
+          <dt><kbd>left-drag</kbd></dt><dd>orbit camera</dd>
+          <dt><kbd>scroll</kbd></dt><dd>zoom</dd>
+          <dt><kbd>h</kbd></dt><dd>toggle heightmap colors</dd>
+          <dt><kbd>b</kbd></dt><dd>toggle boundary lines</dd>
+        </dl>
+        <div class="wt-tip">
+          Terraform editing requires 2D view. Painting and building placement work in both.
+        </div>
+      </div>
+
+      <!-- PAGE 7: Save/Load -->
+      <div class="wt-page" data-page="7">
+        <div class="wt-page-title">saving &amp; loading</div>
+        <p class="wt-text">
+          Plans save as <strong>JSON files</strong> to your computer. Nothing is stored on a
+          server &mdash; your plans are entirely local.
+        </p>
+        <dl class="wt-kv">
+          <dt>save</dt><dd>downloads current plan as .json</dd>
+          <dt>load</dt><dd>opens a file picker to load a saved plan</dd>
+          <dt>reset</dt><dd>clears everything (no undo!)</dd>
+        </dl>
+        <p class="wt-text">
+          The plan name in the top bar sets the filename. Plans include all painted hexes,
+          buildings with rotation, depth values, and labels. Share .json files with other
+          players &mdash; they just load them into their own BSP.
+        </p>
+        <div class="wt-tip">
+          Save often. No auto-save and no undo yet.
+        </div>
+      </div>
+
+      <!-- PAGE 8: Quick Reference -->
+      <div class="wt-page" data-page="8">
+        <div class="wt-page-title">quick reference</div>
+        <p class="wt-text" style="margin-bottom:4px;">All keyboard shortcuts:</p>
+        <dl class="wt-kv" style="margin-bottom:6px;">
+          <dt><kbd>click</kbd></dt><dd>paint / place stamp</dd>
+          <dt><kbd>drag</kbd></dt><dd>paint area</dd>
+          <dt><kbd>middle-drag</kbd></dt><dd>pan view</dd>
+          <dt><kbd>scroll</kbd></dt><dd>zoom</dd>
+          <dt><kbd>dbl-click</kbd></dt><dd>add text label</dd>
+        </dl>
+        <dl class="wt-kv" style="margin-bottom:6px;">
+          <dt><kbd>x</kbd></dt><dd>stamp mode</dd>
+          <dt><kbd>t</kbd></dt><dd>terraform mode</dd>
+          <dt><kbd>3</kbd></dt><dd>3d view</dd>
+          <dt><kbd>b</kbd></dt><dd>boundaries</dd>
+          <dt><kbd>h</kbd></dt><dd>heightmap</dd>
+          <dt><kbd>i</kbd></dt><dd>invert zoom</dd>
+        </dl>
+        <dl class="wt-kv" style="margin-bottom:6px;">
+          <dt><kbd>q</kbd></dt><dd>rotate CCW</dd>
+          <dt><kbd>e</kbd> / <kbd>r</kbd></dt><dd>rotate CW</dd>
+          <dt><kbd>shift+click</kbd></dt><dd>select / reposition building</dd>
+          <dt><kbd>del</kbd></dt><dd>delete selected</dd>
+          <dt><kbd>ctrl+click</kbd></dt><dd>multi-select tiles</dd>
+          <dt><kbd>esc</kbd></dt><dd>deselect / exit mode</dd>
+        </dl>
+        <dl class="wt-kv">
+          <dt><kbd>+</kbd> / <kbd>-</kbd></dt><dd>brush size</dd>
+          <dt><kbd>1</kbd>&ndash;<kbd>5</kbd></dt><dd>focus panel</dd>
+          <dt><kbd>?</kbd></dt><dd>this guide</dd>
+        </dl>
+      </div>
+
+    </div>
+    <div class="wt-footer">
+      <span class="wt-page-indicator" id="wtPageIndicator">1 / 9</span>
+      <div class="wt-nav">
+        <button class="wt-btn" id="wtPrev" disabled>&larr; prev</button>
+        <button class="wt-btn primary" id="wtNext">next &rarr;</button>
       </div>
     </div>
   </div>
 </div>
 
 <script type="module" src="./js/main.js"></script>
+<script type="module" src="./js/ui/walkthrough.js"></script>
 
 <!-- UI adapter — hint visibility + keyboard panel shortcuts
      Zero coupling to main.js: observes DOM mutations -->
