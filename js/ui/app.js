@@ -13,7 +13,7 @@ import {
   axialToPixel, getHexesInRadius, getNeighbors,
   getHexVertices, getDirectionIndex, getExternalVertices, sortVerticesByAngle,
 } from '../core/hex-math.js';
-import { HexGrid, rectBounds } from '../core/grid.js';
+import { HexGrid, rectBounds, DEFAULT_COLOR } from '../core/grid.js';
 import TileSystem, { isSpacerHex } from '../core/tile-system.js';
 import BuildingCatalog from '../core/building-catalog.js';
 import SceneManager from '../rendering/SceneManager.js';
@@ -25,7 +25,8 @@ import BuildingRenderer from '../rendering/BuildingRenderer.js';
 import LabelRenderer from '../rendering/LabelRenderer.js';
 import HoverPreviewRenderer from '../rendering/HoverPreviewRenderer.js';
 
-const DEFAULT_HEX_COLOR = '#2a2838';
+// Pull from grid.js so eraser and "empty" always agree with the data layer
+const DEFAULT_HEX_COLOR = DEFAULT_COLOR;
 const DEFAULT_DEPTH = 25;
 const HEX_SIZE = 20;
 
@@ -65,6 +66,7 @@ export default class App {
     this._nextBuildingId = 1;
     this._callbacks = {};
     this._boundaryGroup = null;
+    this._selectionGroup = null; // highlighted tile boundaries for terraform selection
     this._depthOverlay = null;    // InstancedMesh for 2D depth heatmap
     this._depthOverlayGeo = null; // full-size hex (not 96% inset) to fill gaps
   }
@@ -206,6 +208,7 @@ export default class App {
     }
 
     this._emit('tileSelectionChange', this.selectedTileKeys);
+    this._rebuildSelectionHighlight();
   }
 
   setDepth(depth) {
@@ -214,10 +217,21 @@ export default class App {
       const tile = this.tiles.tiles.get(key);
       if (!tile) continue;
       tile.depth = clamped;
-      this.terrain.updateTile(tile, (q, r) => this._getColor(q, r), this.heightMapMode, this.tiles);
+
+      // Only rebuild 3D terrain meshes when actually in 3D view
+      if (this.show3D) {
+        this.terrain.updateTile(tile, (q, r) => this._getColor(q, r), this.heightMapMode, this.tiles);
+      }
     }
+
+    // Boundary lines are depth-colored — rebuild them so user sees the change
+    if (this.showBoundaries) {
+      this._clearBoundaryLines();
+      this._buildBoundaryLines();
+    }
+
     this.labels.refreshPositions();
-    if (this.heightMapMode) this._refreshDepthOverlay();
+    if (this.heightMapMode && !this.show3D) this._refreshDepthOverlay();
     this._emit('depthChange', clamped);
   }
 
@@ -285,10 +299,49 @@ export default class App {
     this.buildings.delete(id);
     this.buildingRenderer.remove(id);
 
+    if (this.selectedBuildingId === id) this.selectedBuildingId = null;
+
     // Grid changes from clearBuilding flow through dirty tracking
     this._flushGridChanges();
 
     this._emit('buildingRemoved', id);
+  }
+
+  // Pick up a placed building and drop it at a new anchor.
+  // Keeps the same id, rotation, and catalog entry — just moves it.
+  repositionBuilding(id, newQ, newR) {
+    const placement = this.buildings.get(id);
+    if (!placement) return null;
+
+    const hitbox = this.catalog.getRotatedHitbox(placement.catalogId, placement.rotation);
+    const newHexes = hitbox.map(h => ({ q: newQ + h.q, r: newR + h.r }));
+
+    // Collision check against everything except this building's own hexes
+    for (const hex of newHexes) {
+      if (!this._inBounds(hex.q, hex.r)) return null;
+      const existing = this.grid.get(hex.q, hex.r);
+      if (existing?.buildingId && existing.buildingId !== id) return null;
+    }
+
+    // Clear old position
+    for (const hex of placement.hexes) {
+      this.grid.clearBuilding(hex.q, hex.r);
+    }
+
+    // Write new position
+    for (const hex of newHexes) {
+      this.grid.assignBuilding(hex.q, hex.r, id);
+    }
+
+    placement.q = newQ;
+    placement.r = newR;
+    placement.hexes = newHexes;
+
+    this.buildingRenderer.move(id, newHexes, (q, r) => this._terrainHeight(q, r));
+    this._flushGridChanges();
+
+    this._emit('buildingRepositioned', placement);
+    return placement;
   }
 
   findBuildingAt(q, r) {
@@ -299,6 +352,45 @@ export default class App {
   rotateStamp(direction = 1) {
     this.stampRotation = ((this.stampRotation + direction) % 6 + 6) % 6;
     this._emit('stampRotationChange', this.stampRotation);
+  }
+
+  // Rotate a placed building that's currently selected.
+  // Removes it from old hexes, recalculates footprint, replaces it.
+  rotateSelectedBuilding(direction = 1) {
+    if (!this.selectedBuildingId) return null;
+    const placement = this.buildings.get(this.selectedBuildingId);
+    if (!placement) return null;
+
+    const newRot = ((placement.rotation + direction) % 6 + 6) % 6;
+    const hitbox = this.catalog.getRotatedHitbox(placement.catalogId, newRot);
+    const newHexes = hitbox.map(h => ({ q: placement.q + h.q, r: placement.r + h.r }));
+
+    // Check that the rotated footprint fits (skip self-occupied hexes)
+    for (const hex of newHexes) {
+      if (!this._inBounds(hex.q, hex.r)) return null;
+      const existing = this.grid.get(hex.q, hex.r);
+      if (existing?.buildingId && existing.buildingId !== placement.id) return null;
+    }
+
+    // Clear old footprint
+    for (const hex of placement.hexes) {
+      this.grid.clearBuilding(hex.q, hex.r);
+    }
+
+    // Write new rotated footprint
+    for (const hex of newHexes) {
+      this.grid.assignBuilding(hex.q, hex.r, placement.id);
+    }
+
+    placement.rotation = newRot;
+    placement.hexes = newHexes;
+
+    this.buildingRenderer.move(placement.id, newHexes, (q, r) => this._terrainHeight(q, r));
+    this.buildingRenderer.recolor(placement.id, '#ffff00');
+    this._flushGridChanges();
+
+    this._emit('buildingRotated', placement);
+    return placement;
   }
 
   // --- Labels ---
@@ -312,7 +404,7 @@ export default class App {
 
   toggle3D(on) {
     this.show3D = on;
-    this.hexGrid.setVisible(!on); // hide flat grid in 3D, show in 2D
+    this.hexGrid.setVisible(!on);
     if (this._depthOverlay) this._depthOverlay.visible = !on;
     if (on) {
       this.scene.setMode('perspective');
@@ -321,7 +413,10 @@ export default class App {
     } else {
       this.scene.setMode('ortho');
       this.terrain.clear();
-      this.buildingRenderer.clear();
+      // Rebuild buildings so they sit flat at y=0 for the ortho view.
+      // Without this they vanish — the flat hex grid doesn't know about
+      // building colors, only BuildingRenderer draws them.
+      this._rebuildBuildings();
     }
     this._emit('viewModeChange', on);
   }
@@ -365,20 +460,42 @@ export default class App {
   _onHexClick(q, r, e) {
     if (this.mode === 'terraform') {
       this.selectTile(q, r, e.ctrlKey || e.metaKey);
-    } else if (this.mode === 'stamp') {
-      this.placeBuilding(q, r);
-    } else {
-      // Shift-click selects building
-      if (e.shiftKey) {
-        const b = this.findBuildingAt(q, r);
-        if (b) {
-          this.selectedBuildingId = b.id;
-          this._emit('buildingSelected', b);
-          return;
-        }
-      }
-      this.paint(q, r);
+      return;
     }
+
+    // Shift+click: select a building, or reposition the currently selected one
+    if (e.shiftKey) {
+      const clicked = this.findBuildingAt(q, r);
+      if (clicked) {
+        // Clicking a building — select it (deselect previous first)
+        if (this.selectedBuildingId && this.selectedBuildingId !== clicked.id) {
+          const old = this.buildings.get(this.selectedBuildingId);
+          if (old) this.buildingRenderer.recolor(this.selectedBuildingId, old.color);
+        }
+        this.selectedBuildingId = clicked.id;
+        this.buildingRenderer.recolor(clicked.id, '#ffff00');
+        this._emit('buildingSelected', clicked);
+        return;
+      }
+      // Shift+click on empty space with a selected building — reposition
+      if (this.selectedBuildingId) {
+        const result = this.repositionBuilding(this.selectedBuildingId, q, r);
+        if (result) {
+          this.buildingRenderer.recolor(result.id, '#ffff00');
+          this._emit('buildingRepositioned', result);
+        }
+        return;
+      }
+    }
+
+    // Building placement: if a stamp is selected, place it (no mode gate needed)
+    if (this.selectedStampId && this.mode === 'stamp') {
+      this.placeBuilding(q, r);
+      return;
+    }
+
+    // Default: paint
+    this.paint(q, r);
   }
 
   _onHexDrag(q, r, e) {
@@ -391,13 +508,31 @@ export default class App {
   }
 
   // Show what will happen if you click here.
-  // Paint mode: colored footprint matching brush size.
-  // Stamp mode: building shape at current rotation.
-  // Terraform: no preview (tile selection is click-based).
+  // Selected building: footprint at current hover position (reposition preview).
+  // Terraform: outline the tile cluster you'd select.
+  // Stamp selected: building shape at current rotation.
+  // Default: paint brush footprint.
   _updatePreview(q, r) {
     if (this.mode === 'terraform') {
-      this.hoverPreview.clear();
+      const tile = this.tiles.getTileAt(q, r);
+      if (tile) {
+        const clusterHexes = getNeighbors(tile.q, tile.r).map(n => ({ q: n.q, r: n.r }));
+        clusterHexes.push({ q: tile.q, r: tile.r });
+        this.hoverPreview.updateStamp(0, 0, clusterHexes, '#ff6600');
+      } else {
+        this.hoverPreview.clear();
+      }
       return;
+    }
+
+    // Selected building — show its footprint following the cursor
+    if (this.selectedBuildingId) {
+      const placement = this.buildings.get(this.selectedBuildingId);
+      if (placement) {
+        const hitbox = this.catalog.getRotatedHitbox(placement.catalogId, placement.rotation);
+        this.hoverPreview.updateStamp(q, r, hitbox, '#ffff00');
+        return;
+      }
     }
 
     if (this.mode === 'stamp' && this.selectedStampId) {
@@ -432,17 +567,25 @@ export default class App {
   }
 
   _buildingColor(building) {
-    // Category-based color scheme matching old planner conventions
-    const colors = {
-      Crafting: 'orange',
-      Storage: '#8888ff',
-      Housing: 'green',
-      Trade: 'cyan',
-      Structure: '#888888',
-      Empire: 'magenta',
-      World: '#aa6633',
+    // Tier-based coloring matches the game's quality progression.
+    // Buildings without tiers (banners, signs, etc.) fall back to category.
+    const tierMap = {
+      Rough: '#888888', Simple: '#d4722a', Sturdy: '#3a8a3a',
+      Fine: '#3a6abf', Ornate: '#8a3ab0', Exquisite: '#b83030',
+      Flawless: '#c8b832', Pristine: '#40b8a0', Magnificent: '#2a2a2a',
+      Peerless: '#e8e8e8', Ancient: '#c0a060',
     };
-    return colors[building.category] || 'white';
+    if (building.tier && tierMap[building.tier]) {
+      return tierMap[building.tier];
+    }
+
+    const catColors = {
+      Crafting: '#d4722a', Storage: '#3a6abf', Housing: '#3a8a3a',
+      Commerce: '#c8b832', Farming: '#3a8a3a', Furniture: '#888888',
+      Lighting: '#c8b832', 'Outdoor Decor': '#888888', Banners: '#b83030',
+      'Walls & Gates': '#888888', World: '#3a6abf', Seasonal: '#8a3ab0',
+    };
+    return catColors[building.category] || '#888888';
   }
 
   _computeCenterOffset() {
@@ -512,13 +655,54 @@ export default class App {
   // Tile boundary visualization — dashed outlines around each 7-hex cluster.
   // Lives on the XZ plane at y=0.5 (just above the flat hex grid).
 
+  // Bright overlay for selected terraform tiles — same geometry as boundaries
+  // but in a distinct color so you can tell what you're about to edit.
+  _rebuildSelectionHighlight() {
+    this._clearSelectionHighlight();
+    if (this.selectedTileKeys.size === 0) return;
+
+    const group = new THREE.Group();
+    group.name = 'tileSelection';
+
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xff6600, opacity: 0.9, transparent: true, linewidth: 2,
+    });
+
+    const centerPx = this._computeCenterOffset();
+
+    for (const key of this.selectedTileKeys) {
+      const tile = this.tiles.tiles.get(key);
+      if (!tile) continue;
+
+      const points = this._tileBoundaryPoints(tile, centerPx);
+      if (points.length < 3) continue;
+
+      // Lift slightly above normal boundaries so it draws on top
+      for (const p of points) p.y = 1.0;
+      points.push(points[0].clone());
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      group.add(new THREE.Line(geo, mat));
+    }
+
+    this.scene.scene.add(group);
+    this._selectionGroup = group;
+  }
+
+  _clearSelectionHighlight() {
+    if (!this._selectionGroup) return;
+    this.scene.scene.remove(this._selectionGroup);
+    for (const child of this._selectionGroup.children) {
+      if (child.geometry) child.geometry.dispose();
+    }
+    if (this._selectionGroup.children[0]?.material) {
+      this._selectionGroup.children[0].material.dispose();
+    }
+    this._selectionGroup = null;
+  }
+
   _buildBoundaryLines() {
     const group = new THREE.Group();
     group.name = 'tileBoundaries';
-
-    const mat = new THREE.LineBasicMaterial({
-      color: 0x00ffff, opacity: 0.35, transparent: true,
-    });
 
     const centerPx = this._computeCenterOffset();
 
@@ -527,8 +711,19 @@ export default class App {
       if (points.length < 3) continue;
 
       points.push(points[0].clone()); // close the loop
+
+      // Color each tile boundary by its depth — gives immediate visual
+      // feedback when terraforming in 2D, like the old SVG gradient borders
+      const mat = new THREE.LineBasicMaterial({
+        color: depthToColor(tile.depth),
+        opacity: 0.65,
+        transparent: true,
+      });
+
       const geo = new THREE.BufferGeometry().setFromPoints(points);
-      group.add(new THREE.Line(geo, mat));
+      const line = new THREE.Line(geo, mat);
+      line.userData.tileKey = `${tile.n},${tile.m}`;
+      group.add(line);
     }
 
     this.scene.scene.add(group);
@@ -538,12 +733,9 @@ export default class App {
   _clearBoundaryLines() {
     if (!this._boundaryGroup) return;
     this.scene.scene.remove(this._boundaryGroup);
-    // Dispose line geometries
     for (const child of this._boundaryGroup.children) {
       if (child.geometry) child.geometry.dispose();
-    }
-    if (this._boundaryGroup.children[0]?.material) {
-      this._boundaryGroup.children[0].material.dispose();
+      if (child.material) child.material.dispose();
     }
     this._boundaryGroup = null;
   }

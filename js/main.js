@@ -5,6 +5,7 @@
 
 import App from './ui/app.js';
 import GridSizeUI from './ui/grid-size-ui.js';
+import { DEFAULT_COLOR } from './core/grid.js';
 
 // Building data -- loaded from the compact JSON.
 import buildingData from '../data/buildings-planner-compact.json' with { type: 'json' };
@@ -66,11 +67,42 @@ function wireAccordionCards() {
 // Populates #colorPalette with swatch divs. Must run before wireColorPalette.
 // Old code used CONFIG.PRESET_COLORS + AppState.dom.colorGrid -- this replaces both.
 
+// Palette based on the actual game tier progression.
+// T1 gray → T10 white, matching what players see in-game.
+// Second row is gravel variants (same hue, darkened) since that's
+// the main visual distinction in the paving textures.
+const TIER_COLORS = {
+  1:  '#888888',  // Rough — gray
+  2:  '#d4722a',  // Simple — orange
+  3:  '#3a8a3a',  // Sturdy — green
+  4:  '#3a6abf',  // Fine — blue
+  5:  '#8a3ab0',  // Ornate — purple
+  6:  '#b83030',  // Exquisite — red
+  7:  '#c8b832',  // Flawless — yellow
+  8:  '#40b8a0',  // Pristine — aquamarine
+  9:  '#2a2a2a',  // Magnificent — black
+  10: '#e8e8e8',  // Peerless — white
+};
+
+// Gravel = same hue but pulled toward dark. Multiply-style darken.
+function gravel(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const f = 0.5; // darken factor
+  return '#' + [r, g, b].map(c => Math.round(c * f).toString(16).padStart(2, '0')).join('');
+}
+
 const PRESET_COLORS = [
-  '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71',
-  '#1abc9c', '#3498db', '#9b59b6', '#e91e63',
-  '#ff6b35', '#00ff88', '#00ffff', '#8b5cf6',
-  '#795548', '#607d8b', '#ffffff', '#2a2838',
+  // Row 1: Tier colors (normal paving)
+  TIER_COLORS[1], TIER_COLORS[2], TIER_COLORS[3], TIER_COLORS[4],
+  // Row 2: Tier colors continued
+  TIER_COLORS[5], TIER_COLORS[6], TIER_COLORS[7], TIER_COLORS[8],
+  // Row 3: Dark tiers + gravel start
+  TIER_COLORS[9], TIER_COLORS[10], gravel(TIER_COLORS[1]), gravel(TIER_COLORS[2]),
+  // Row 4: More gravel + utility
+  gravel(TIER_COLORS[3]), gravel(TIER_COLORS[4]), gravel(TIER_COLORS[5]), gravel(TIER_COLORS[6]),
+  // Row 5: Special swatches
   'border-pattern', 'eraser', 'custom-color',
 ];
 
@@ -340,10 +372,20 @@ function wireKeyboard() {
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, textarea, select')) return;
 
-    if (e.key === 'q' || e.key === 'Q') app.rotateStamp(-1);
-    if (e.key === 'e' || e.key === 'E' || e.key === 'r' || e.key === 'R') app.rotateStamp(1);
+    if (e.key === 'q' || e.key === 'Q') {
+      app.selectedBuildingId ? app.rotateSelectedBuilding(-1) : app.rotateStamp(-1);
+    }
+    if (e.key === 'e' || e.key === 'E' || e.key === 'r' || e.key === 'R') {
+      app.selectedBuildingId ? app.rotateSelectedBuilding(1) : app.rotateStamp(1);
+    }
     if (e.key === 'Escape') {
       app.selectedTileKeys.clear();
+      app._clearSelectionHighlight();
+      // Restore building color if one was selected
+      if (app.selectedBuildingId) {
+        const old = app.buildings.get(app.selectedBuildingId);
+        if (old) app.buildingRenderer.recolor(app.selectedBuildingId, old.color);
+      }
       app.selectedBuildingId = null;
       app.mode = 'paint';
 
@@ -360,6 +402,10 @@ function wireKeyboard() {
     }
     if (e.key === '+' || e.key === '=') { app.brushSize = Math.min(5, app.brushSize + 1); updateBrushDisplay(); }
     if (e.key === '-' || e.key === '_') { app.brushSize = Math.max(1, app.brushSize - 1); updateBrushDisplay(); }
+    if (e.key === 'i' || e.key === 'I') {
+      app.camera.invertZoom = !app.camera.invertZoom;
+      console.log('[Zoom] invert:', app.camera.invertZoom);
+    }
   });
 }
 
@@ -394,6 +440,7 @@ function wireFileOps() {
 
   if (saveBtn) {
     saveBtn.addEventListener('click', () => {
+      console.log('[Save] triggered');
       const planName = document.getElementById('planName')?.value || 'settlement';
       const data = {
         version: 2,
@@ -415,23 +462,36 @@ function wireFileOps() {
       a.download = `${planName.replace(/\s+/g, '_')}.json`;
       a.click();
       URL.revokeObjectURL(url);
+      console.log('[Save] done:', data.grid.hexes.length, 'hexes,', data.tiles.length, 'tiles,', data.buildings.length, 'buildings');
     });
   }
 
   if (loadBtn && fileInput) {
-    loadBtn.addEventListener('click', () => fileInput.click());
+    loadBtn.addEventListener('click', () => {
+      console.log('[Load] file picker opening');
+      fileInput.click();
+    });
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      console.log('[Load] reading file:', file.name);
 
       const reader = new FileReader();
       reader.onload = () => {
+        let data;
         try {
-          const data = JSON.parse(reader.result);
-          loadPlan(data);
+          data = JSON.parse(reader.result);
         } catch (err) {
-          console.error('Failed to load plan:', err);
-          alert('Failed to load plan file.');
+          console.error('[Load] JSON parse failed:', err);
+          alert('Invalid JSON file.');
+          return;
+        }
+        try {
+          loadPlan(data);
+          console.log('[Load] plan applied');
+        } catch (err) {
+          console.error('[Load] apply failed:', err);
+          alert('Error loading plan: ' + err.message);
         }
       };
       reader.readAsText(file);
@@ -442,12 +502,15 @@ function wireFileOps() {
   if (resetBtn) {
     resetBtn.addEventListener('click', () => {
       if (!confirm('Reset the entire map? This cannot be undone.')) return;
+      console.log('[Reset] clearing');
       app.grid.reset();
       app.tiles.generate(app.bounds);
+      app._markSpacers();
       app.buildings.clear();
       app.buildingRenderer.clear();
       app.hexGrid.rebuild(app.grid);
       updateStats();
+      console.log('[Reset] done');
     });
   }
 }
@@ -462,6 +525,10 @@ function loadPlan(data) {
 
   if (data.grid) {
     app.grid.fromJSON(data.grid);
+    // fromJSON clears + repopulates the grid, which creates fresh HexData
+    // objects without spacer flags. Re-mark them so the renderer shades
+    // spacer hexes correctly.
+    app._markSpacers();
     app.hexGrid.rebuild(app.grid);
   }
 
