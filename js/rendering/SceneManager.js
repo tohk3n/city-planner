@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 
-const BG_COLOR = 0x0a0a0f;
+const BG_COLOR = 0x121010;
 
 const PERSPECTIVE_DEFAULTS = {
   fov: 50,
