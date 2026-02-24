@@ -36,6 +36,7 @@ export default class CameraController {
   constructor(sceneManager) {
     this.sm = sceneManager;
     this._el = sceneManager.renderer.domElement;
+    this.invertZoom = false; // flip scroll direction if users prefer it
 
     // Perspective orbit state (spherical around target)
     this.target = new THREE.Vector3(0, 0, 0);
@@ -146,14 +147,13 @@ export default class CameraController {
 
   _onWheel(e) {
     e.preventDefault();
+    const delta = this.invertZoom ? -e.deltaY : e.deltaY;
 
     if (this.sm.mode === 'ortho') {
-      // Zoom toward/away from cursor.
-      // Multiply by current zoom so it feels proportional at all levels.
-      const factor = 1 + e.deltaY * DEFAULTS.zoomSpeed * 0.01;
+      const factor = 1 + delta * DEFAULTS.zoomSpeed * 0.01;
       this.sm.setOrthoZoom(this.sm.orthoZoom * factor);
     } else {
-      this.spherical.radius += e.deltaY * DEFAULTS.zoomSpeed * 2;
+      this.spherical.radius += delta * DEFAULTS.zoomSpeed * 2;
       this.spherical.radius = clamp(
         this.spherical.radius, DEFAULTS.minRadius, DEFAULTS.maxRadius
       );

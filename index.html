@@ -63,7 +63,7 @@
             <button id="stampModeBtn" class="term-btn" tabindex="0">stamp <kbd>x</kbd></button>
             <button id="terraformModeBtn" class="term-btn" tabindex="0">terraform <kbd>t</kbd></button>
             <button id="showBoundariesBtn" class="term-btn" tabindex="0">boundaries <kbd>b</kbd></button>
-            <button id="show3DViewBtn" class="term-btn" tabindex="0">3d view <kbd>3</kbd></button>
+            <button id="show3DViewBtn" class="term-btn" tabindex="0">3d view <kbd>v</kbd></button>
             <button id="heightMapModeBtn" class="term-btn" tabindex="0">heightmap <kbd>h</kbd></button>
           </div>
         </div>
@@ -180,7 +180,7 @@
         <div class="guide-row"><kbd>q</kbd> rotate CCW</div>
         <div class="guide-row"><kbd>e</kbd> / <kbd>r</kbd> rotate CW</div>
         <div class="guide-row"><kbd>shift+click</kbd> select building</div>
-        <div class="guide-row"><kbd>shift+click sel</kbd> reposition</div>
+        <div class="guide-row"><kbd>shift+click</kbd> reposition (with sel.)</div>
         <div class="guide-row"><kbd>del</kbd> delete selected</div>
       </div>
       <div class="guide-section">
@@ -188,13 +188,14 @@
         <div class="guide-row"><kbd>+</kbd> / <kbd>-</kbd> brush size</div>
         <div class="guide-row"><kbd>ctrl+click</kbd> multi-select tiles</div>
         <div class="guide-row"><kbd>esc</kbd> deselect / exit mode</div>
+        <div class="guide-row"><kbd>i</kbd> invert zoom scroll</div>
       </div>
       <div class="guide-section">
         <div class="guide-title">modes</div>
         <div class="guide-row"><kbd>x</kbd> toggle stamp mode</div>
         <div class="guide-row"><kbd>t</kbd> toggle terraform mode</div>
         <div class="guide-row"><kbd>b</kbd> toggle boundaries</div>
-        <div class="guide-row"><kbd>3</kbd> toggle 3d view</div>
+        <div class="guide-row"><kbd>v</kbd> toggle 3d view</div>
         <div class="guide-row"><kbd>h</kbd> toggle heightmap</div>
       </div>
       <div class="guide-section">
@@ -261,7 +262,7 @@
       'x': 'stampModeBtn',
       't': 'terraformModeBtn',
       'b': 'showBoundariesBtn',
-      '3': 'show3DViewBtn',
+      'v': 'show3DViewBtn',
       'h': 'heightMapModeBtn',
     };
 
