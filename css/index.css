@@ -228,6 +228,36 @@ html, body {
   display: block;
 }
 
+/* --- 3D Viewport HUD (minimap with integrated compass) --- */
+/* Visible in perspective mode only. Top-right of viewport. */
+
+.hud-minimap {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.hud-minimap-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--fg2);
+  text-align: center;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.hud-minimap-canvas {
+  display: block;
+  border-radius: 1px;
+}
+
 /* --- Bottom Bar (status line) --- */
 
 .bar-bottom {

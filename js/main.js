@@ -589,6 +589,7 @@ function wireAnimationLoop() {
   const loop = () => {
     requestAnimationFrame(loop);
     app.camera.update();
+    if (app.show3D) app.hud.update(app.camera, app.tiles, app.bounds);
     app.scene.render();
   };
   loop();
