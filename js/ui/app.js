@@ -24,6 +24,7 @@ import TerrainRenderer from '../rendering/TerrainRenderer.js';
 import BuildingRenderer from '../rendering/BuildingRenderer.js';
 import LabelRenderer from '../rendering/LabelRenderer.js';
 import HoverPreviewRenderer from '../rendering/HoverPreviewRenderer.js';
+import * as undo from '../core/undo-stack.js';
 
 // Pull from grid.js so eraser and "empty" always agree with the data layer
 const DEFAULT_HEX_COLOR = DEFAULT_COLOR;
@@ -106,8 +107,9 @@ export default class App {
     this.interaction.onHexDown = (q, r, e) => this._onHexClick(q, r, e);
     this.interaction.onHexDrag = (q, r, e) => this._onHexDrag(q, r, e);
     this.interaction.onHexMove = (q, r) => this._onHexHover(q, r);
+    this.interaction.onHexUp = () => undo.commitBatch();
     this.interaction.onDoubleClick = (q, r) => this._onDoubleClick(q, r);
-    this.interaction.onLeave = () => this.hoverPreview.clear();
+    this.interaction.onLeave = () => { undo.commitBatch(); this.hoverPreview.clear(); };
 
     // Initial full render via HexGrid's dirty tracking
     this.hexGrid.rebuild(this.grid);
@@ -180,13 +182,25 @@ export default class App {
       ? [{ q, r }]
       : getHexesInRadius(q, r, this.brushSize - 1);
 
-    for (const hex of hexes) {
-      if (!this._inBounds(hex.q, hex.r)) continue;
-      const color = this.currentColor === 'eraser' ? DEFAULT_HEX_COLOR : this.currentColor;
-      this.grid.setColor(hex.q, hex.r, color);
+    // Snapshot before mutating
+    const before = [];
+    for (const h of hexes) {
+      if (!this._inBounds(h.q, h.r)) continue;
+      const hex = this.grid.get(h.q, h.r);
+      if (hex) before.push({ q: h.q, r: h.r, color: hex.terrainColor, patterned: hex.patterned });
     }
 
-    this._flushGridChanges();
+    const color = this.currentColor === 'eraser' ? DEFAULT_HEX_COLOR : this.currentColor;
+    let changed = false;
+    for (const h of hexes) {
+      if (!this._inBounds(h.q, h.r)) continue;
+      if (this.grid.setColor(h.q, h.r, color)) changed = true;
+    }
+
+    if (changed) {
+      undo.push({ type: 'paint', hexes: before });
+      this._flushGridChanges();
+    }
   }
 
   // --- Terraform ---
@@ -213,6 +227,15 @@ export default class App {
 
   setDepth(depth) {
     const clamped = Math.max(0, Math.min(100, depth));
+
+    // Snapshot tile depths before mutating
+    const before = [];
+    for (const key of this.selectedTileKeys) {
+      const tile = this.tiles.tiles.get(key);
+      if (tile) before.push({ key, depth: tile.depth });
+    }
+    if (before.length) undo.push({ type: 'depth', tiles: before });
+
     for (const key of this.selectedTileKeys) {
       const tile = this.tiles.tiles.get(key);
       if (!tile) continue;
@@ -237,6 +260,14 @@ export default class App {
 
   setBaselineDepth(depth) {
     const clamped = Math.max(0, Math.min(100, depth));
+
+    // Snapshot every tile's current depth before bulk overwrite
+    const before = [];
+    for (const [key, tile] of this.tiles.tiles) {
+      before.push({ key, depth: tile.depth });
+    }
+    if (before.length) undo.push({ type: 'depth', tiles: before });
+
     for (const tile of this.tiles.tiles.values()) {
       tile.depth = clamped;
     }
@@ -283,6 +314,7 @@ export default class App {
     this.buildingRenderer.add(id, worldHexes, color, (hq, hr) => this._terrainHeight(hq, hr));
     this._flushGridChanges();
 
+    undo.push({ type: 'placeBuilding', id });
     this._emit('buildingPlaced', placement);
     return placement;
   }
@@ -290,6 +322,9 @@ export default class App {
   removeBuilding(id) {
     const placement = this.buildings.get(id);
     if (!placement) return;
+
+    // Snapshot the full placement so undo can re-place it
+    undo.push({ type: 'removeBuilding', placement: { ...placement } });
 
     // Clear grid ownership
     for (const hex of placement.hexes) {
@@ -323,6 +358,11 @@ export default class App {
       if (existing?.buildingId && existing.buildingId !== id) return null;
     }
 
+    // Snapshot before moving
+    const oldQ = placement.q;
+    const oldR = placement.r;
+    const oldHexes = [...placement.hexes];
+
     // Clear old position
     for (const hex of placement.hexes) {
       this.grid.clearBuilding(hex.q, hex.r);
@@ -340,6 +380,7 @@ export default class App {
     this.buildingRenderer.move(id, newHexes, (q, r) => this._terrainHeight(q, r));
     this._flushGridChanges();
 
+    undo.push({ type: 'reposition', id, oldQ, oldR, oldHexes });
     this._emit('buildingRepositioned', placement);
     return placement;
   }
@@ -372,6 +413,10 @@ export default class App {
       if (existing?.buildingId && existing.buildingId !== placement.id) return null;
     }
 
+    // Snapshot before mutating
+    const oldRot = placement.rotation;
+    const oldHexes = [...placement.hexes];
+
     // Clear old footprint
     for (const hex of placement.hexes) {
       this.grid.clearBuilding(hex.q, hex.r);
@@ -389,6 +434,7 @@ export default class App {
     this.buildingRenderer.recolor(placement.id, '#ffff00');
     this._flushGridChanges();
 
+    undo.push({ type: 'rotate', id: placement.id, oldRot, oldHexes });
     this._emit('buildingRotated', placement);
     return placement;
   }
@@ -396,8 +442,107 @@ export default class App {
   // --- Labels ---
 
   setLabel(q, r, text) {
+    const oldText = this.labels.getText(q, r) || '';
     this.labels.set(q, r, text);
     this.grid.setText(q, r, text || '');
+    undo.push({ type: 'label', q, r, oldText });
+  }
+
+  // --- Undo ---
+
+  undo() {
+    const entry = undo.pop();
+    if (!entry) return;
+
+    switch (entry.type) {
+      case 'paint':
+        for (const h of entry.hexes) {
+          if (h.patterned) {
+            this.grid.setPattern(h.q, h.r, true);
+          } else {
+            this.grid.setColor(h.q, h.r, h.color);
+          }
+        }
+        this._flushGridChanges();
+        break;
+
+      case 'depth':
+        for (const t of entry.tiles) {
+          const tile = this.tiles.tiles.get(t.key);
+          if (!tile) continue;
+          tile.depth = t.depth;
+          if (this.show3D) {
+            this.terrain.updateTile(tile, (q, r) => this._getColor(q, r), this.heightMapMode, this.tiles);
+          }
+        }
+        if (this.showBoundaries) {
+          this._clearBoundaryLines();
+          this._buildBoundaryLines();
+        }
+        this.labels.refreshPositions();
+        if (this.heightMapMode && !this.show3D) this._refreshDepthOverlay();
+        break;
+
+      case 'placeBuilding':
+        this.removeBuilding(entry.id);
+        // removeBuilding pushes its own undo entry - discard it
+        undo.pop();
+        break;
+
+      case 'removeBuilding': {
+        const p = entry.placement;
+        // Re-register in grid
+        for (const hex of p.hexes) {
+          this.grid.assignBuilding(hex.q, hex.r, p.id);
+        }
+        this.buildings.set(p.id, p);
+        this.buildingRenderer.add(p.id, p.hexes, p.color, (q, r) => this._terrainHeight(q, r));
+        this._flushGridChanges();
+        // Keep _nextBuildingId ahead of any restored id
+        const num = parseInt(p.id.replace('bld_', ''), 10);
+        if (num >= this._nextBuildingId) this._nextBuildingId = num + 1;
+        break;
+      }
+
+      case 'reposition':
+        this._undoMove(entry.id, entry.oldQ, entry.oldR, entry.oldHexes);
+        break;
+
+      case 'rotate': {
+        const placement = this.buildings.get(entry.id);
+        if (!placement) break;
+        // Clear current footprint
+        for (const hex of placement.hexes) this.grid.clearBuilding(hex.q, hex.r);
+        // Restore old rotation and footprint
+        placement.rotation = entry.oldRot;
+        placement.hexes = entry.oldHexes;
+        for (const hex of entry.oldHexes) this.grid.assignBuilding(hex.q, hex.r, entry.id);
+        this.buildingRenderer.move(entry.id, entry.oldHexes, (q, r) => this._terrainHeight(q, r));
+        this.buildingRenderer.recolor(entry.id, placement.color);
+        this._flushGridChanges();
+        break;
+      }
+
+      case 'label':
+        this.labels.set(entry.q, entry.r, entry.oldText);
+        this.grid.setText(entry.q, entry.r, entry.oldText);
+        break;
+    }
+
+    this._emit('undo', entry.type);
+  }
+
+  // Shared by reposition undo - moves a building back to its old anchor
+  _undoMove(id, oldQ, oldR, oldHexes) {
+    const placement = this.buildings.get(id);
+    if (!placement) return;
+    for (const hex of placement.hexes) this.grid.clearBuilding(hex.q, hex.r);
+    for (const hex of oldHexes) this.grid.assignBuilding(hex.q, hex.r, id);
+    placement.q = oldQ;
+    placement.r = oldR;
+    placement.hexes = oldHexes;
+    this.buildingRenderer.move(id, oldHexes, (q, r) => this._terrainHeight(q, r));
+    this._flushGridChanges();
   }
 
   // --- View toggles ---
@@ -499,7 +644,12 @@ export default class App {
   }
 
   _onHexDrag(q, r, e) {
-    if (this.mode === 'paint') this.paint(q, r);
+    if (this.mode === 'paint') {
+      // First drag event starts a batch - subsequent paints merge into it.
+      // commitBatch happens on pointerup/leave.
+      if (!undo.batching()) undo.beginBatch();
+      this.paint(q, r);
+    }
   }
 
   _onHexHover(q, r) {

@@ -6,6 +6,7 @@
 import App from './ui/app.js';
 import GridSizeUI from './ui/grid-size-ui.js';
 import { DEFAULT_COLOR } from './core/grid.js';
+import * as undo from './core/undo-stack.js';
 
 // Building data -- loaded from the compact JSON.
 import buildingData from '../data/buildings-planner-compact.json' with { type: 'json' };
@@ -32,35 +33,61 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Accordion Cards ---
-// Click a card-header to expand/collapse. Only one open at a time
-// so the sidebar doesn't overflow. Spectrum starts expanded.
+// Click a card-header to expand/collapse. Only one open at a time.
+// Opening buildings = stamp mode, terrain = terraform mode, else = paint.
 
 function wireAccordionCards() {
   const cards = document.querySelectorAll('.control-card');
+
   for (const card of cards) {
     const header = card.querySelector('.card-header');
     if (!header) continue;
 
-    // Click anywhere on the header to toggle
     header.addEventListener('click', () => {
       const wasCollapsed = card.classList.contains('collapsed');
-      // Collapse all others
+      // Collapse all
       for (const c of cards) c.classList.add('collapsed');
-      // Toggle the clicked one
+      // Toggle clicked
       if (wasCollapsed) card.classList.remove('collapsed');
+
+      syncModeFromPanel();
     });
 
-    // When collapsed, clicking the card body area (which is hidden but
-    // the card padding is still there) should also expand
     card.addEventListener('click', (e) => {
       if (!card.classList.contains('collapsed')) return;
-      // Only if the click wasn't on the header (which handles itself)
       if (header.contains(e.target)) return;
-      const wasCollapsed = true;
       for (const c of cards) c.classList.add('collapsed');
       card.classList.remove('collapsed');
+
+      syncModeFromPanel();
     });
   }
+}
+
+// The open card determines the active mode.
+// Boundaries auto-enable on terraform entry but don't auto-disable on exit.
+function syncModeFromPanel() {
+  const open = document.querySelector('.control-card:not(.collapsed)');
+  const panel = open?.dataset.panel;
+
+  if (panel === '2') {
+    // Buildings card - enter stamp mode
+    app.mode = 'stamp';
+  } else if (panel === '3') {
+    // Terrain card - enter terraform mode + auto-enable boundaries
+    app.mode = 'terraform';
+    if (!app.showBoundaries) {
+      app.showBoundaries = true;
+      app.toggleBoundaries(true);
+      const bBtn = document.getElementById('showBoundariesBtn');
+      if (bBtn) bBtn.classList.add('active');
+    }
+  } else {
+    // Palette, grid, or anything else - back to paint
+    app.mode = 'paint';
+  }
+
+  updateModeDisplay();
 }
 
 // --- Color Palette ---
@@ -167,13 +194,18 @@ function wireColorPalette() {
     } else {
       app.currentColor = color;
     }
-    app.mode = 'paint';
 
-    // Deactivate stamp mode if it was on
-    const stampBtn = document.getElementById('stampModeBtn');
-    const stampsPanel = document.getElementById('stampsPanel');
-    if (stampBtn) stampBtn.classList.remove('active');
-    if (stampsPanel) stampsPanel.style.display = 'none';
+    // Clicking a color swatch opens the palette card if not already open,
+    // which triggers paint mode via syncModeFromPanel
+    const paletteCard = document.querySelector('[data-panel="1"]');
+    if (paletteCard?.classList.contains('collapsed')) {
+      const header = paletteCard.querySelector('.card-header');
+      if (header) header.click();
+    } else {
+      // Already on palette - just make sure we're in paint mode
+      app.mode = 'paint';
+      updateModeDisplay();
+    }
 
     palette.querySelectorAll('[data-color]').forEach(s => s.classList.remove('selected-swatch'));
     swatch.classList.add('selected-swatch');
@@ -198,41 +230,7 @@ function wireGridSizeUI() {
 // --- Mode Toggles ---
 
 function wireModeToggles() {
-  // Stamp mode -- toggles both mode AND panel visibility
-  const stampBtn = document.getElementById('stampModeBtn');
-  const stampsPanel = document.getElementById('stampsPanel');
-  if (stampBtn) {
-    stampBtn.addEventListener('click', () => {
-      const entering = app.mode !== 'stamp';
-      app.mode = entering ? 'stamp' : 'paint';
-      stampBtn.classList.toggle('active', entering);
-      if (stampsPanel) stampsPanel.style.display = entering ? 'flex' : 'none';
-      updateModeDisplay();
-    });
-  }
-
-  // Terraform mode
-  const terraformBtn = document.getElementById('terraformModeBtn');
-  if (terraformBtn) {
-    terraformBtn.addEventListener('click', () => {
-      const entering = app.mode !== 'terraform';
-      app.mode = entering ? 'terraform' : 'paint';
-      terraformBtn.classList.toggle('active', entering);
-
-      if (entering && !app.showBoundaries) {
-        app.showBoundaries = true;
-        app.toggleBoundaries(true);
-        const bBtn = document.getElementById('showBoundariesBtn');
-        if (bBtn) bBtn.classList.add('active');
-      }
-
-      const panel = document.getElementById('terraformPanel');
-      if (panel) panel.style.display = entering ? 'block' : 'none';
-      updateModeDisplay();
-    });
-  }
-
-  // Boundaries
+  // Boundaries - independent toggle, lives in palette card
   const boundariesBtn = document.getElementById('showBoundariesBtn');
   if (boundariesBtn) {
     boundariesBtn.addEventListener('click', () => {
@@ -242,7 +240,7 @@ function wireModeToggles() {
     });
   }
 
-  // 3D toggle
+  // 3D toggle - lives in status bar
   const viewBtn = document.getElementById('show3DViewBtn');
   if (viewBtn) {
     viewBtn.addEventListener('click', () => {
@@ -252,7 +250,7 @@ function wireModeToggles() {
     });
   }
 
-  // Height map
+  // Height map - independent toggle, lives in palette card
   const hmBtn = document.getElementById('heightMapModeBtn');
   if (hmBtn) {
     hmBtn.addEventListener('click', () => {
@@ -284,6 +282,9 @@ function wireTerraformPanel() {
   };
 
   slider.addEventListener('input', (e) => sync(e.target.value));
+  slider.addEventListener('pointerdown', () => undo.beginBatch());
+  slider.addEventListener('pointerup', () => undo.commitBatch());
+  slider.addEventListener('pointerleave', () => undo.commitBatch());
   input.addEventListener('input', (e) => sync(e.target.value));
 
   const baselineInput = document.getElementById('baselineDepthInput');
@@ -372,6 +373,14 @@ function wireKeyboard() {
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, textarea, select')) return;
 
+    // Undo - Ctrl+Z / Cmd+Z
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      e.preventDefault();
+      app.undo();
+      updateStats();
+      return;
+    }
+
     if (e.key === 'q' || e.key === 'Q') {
       app.selectedBuildingId ? app.rotateSelectedBuilding(-1) : app.rotateStamp(-1);
     }
@@ -381,20 +390,15 @@ function wireKeyboard() {
     if (e.key === 'Escape') {
       app.selectedTileKeys.clear();
       app._clearSelectionHighlight();
-      // Restore building color if one was selected
       if (app.selectedBuildingId) {
         const old = app.buildings.get(app.selectedBuildingId);
         if (old) app.buildingRenderer.recolor(app.selectedBuildingId, old.color);
       }
       app.selectedBuildingId = null;
-      app.mode = 'paint';
 
-      const stampsPanel = document.getElementById('stampsPanel');
-      const stampBtn = document.getElementById('stampModeBtn');
-      if (stampsPanel) stampsPanel.style.display = 'none';
-      if (stampBtn) stampBtn.classList.remove('active');
-
-      updateModeDisplay();
+      // Open palette card which triggers paint mode via syncModeFromPanel
+      const paletteHeader = document.querySelector('[data-panel="1"] .card-header');
+      if (paletteHeader) paletteHeader.click();
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && app.selectedBuildingId) {
       app.removeBuilding(app.selectedBuildingId);
@@ -509,6 +513,7 @@ function wireFileOps() {
       app.buildings.clear();
       app.buildingRenderer.clear();
       app.hexGrid.rebuild(app.grid);
+      undo.clear();
       updateStats();
       console.log('[Reset] done');
     });
@@ -516,6 +521,7 @@ function wireFileOps() {
 }
 
 function loadPlan(data) {
+  undo.clear();
   const nameInput = document.getElementById('planName');
   if (nameInput && data.name) nameInput.value = data.name;
 
