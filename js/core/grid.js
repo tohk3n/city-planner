@@ -5,8 +5,8 @@
 
 import { hexKey, axialDistance, getHexesInRadius, inBounds as axialInBounds } from './hex-math.js';
 
-export const DEFAULT_COLOR = '#2a2838';
-export const SPACER_COLOR = '#1a1628';
+export const DEFAULT_COLOR = '#2a4a20';
+export const SPACER_COLOR = '#4b3924';
 const PATTERN_COLOR = 'white';
 
 // -- Bounds factories --
