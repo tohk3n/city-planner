@@ -488,24 +488,8 @@ function loadPlan(data) {
 }
 
 // --- Guide Modal ---
-
-function wireGuideModal() {
-  const guideBtn = document.getElementById('guideBtn');
-  const overlay = document.getElementById('guideOverlay');
-  const closeBtn = document.getElementById('closeGuide');
-
-  if (guideBtn && overlay) {
-    guideBtn.addEventListener('click', () => { overlay.style.display = 'flex'; });
-  }
-  if (closeBtn && overlay) {
-    closeBtn.addEventListener('click', () => { overlay.style.display = 'none'; });
-  }
-  if (overlay) {
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.style.display = 'none';
-    });
-  }
-}
+// Handled by js/ui/walkthrough.js
+function wireGuideModal() {}
 
 // --- UI Helpers ---
 
