@@ -41,7 +41,7 @@
           <span class="header-hint">
             <span class="brush-control">
               <span class="brush-label">brush</span>
-              <button id="brushSizeDecBtn" class="brush-btn" tabindex="0" aria-label="Decrease brush">−</button>
+              <button id="brushSizeDecBtn" class="brush-btn" tabindex="0" aria-label="Decrease brush">-</button>
               <span id="brushSizeDisplay" class="brush-val">1</span>
               <button id="brushSizeIncBtn" class="brush-btn" tabindex="0" aria-label="Increase brush">+</button>
             </span>
@@ -50,33 +50,20 @@
         <div class="card-body">
           <div id="colorPalette"></div>
           <input type="color" id="customColorPicker" style="display:none;">
-        </div>
-      </section>
-
-      <!-- BUILD MODES -->
-      <section class="control-card collapsed" data-panel="2" aria-label="Build modes">
-        <div class="card-header" role="button" aria-expanded="false" tabindex="0">
-          <span class="header-text"><span class="collapse-icon"></span>modes <span class="panel-num">2</span></span>
-        </div>
-        <div class="card-body">
-          <div class="mode-grid">
-            <button id="stampModeBtn" class="term-btn" tabindex="0">stamp <kbd>x</kbd></button>
-            <button id="terraformModeBtn" class="term-btn" tabindex="0">terraform <kbd>t</kbd></button>
-            <button id="showBoundariesBtn" class="term-btn" tabindex="0">boundaries <kbd>b</kbd></button>
-            <button id="show3DViewBtn" class="term-btn" tabindex="0">3d view <kbd>v</kbd></button>
-            <button id="heightMapModeBtn" class="term-btn" tabindex="0">heightmap <kbd>h</kbd></button>
+          <div class="palette-toggles">
+            <button id="showBoundariesBtn" class="term-btn toggle-sm" tabindex="0">boundaries <kbd>b</kbd></button>
+            <button id="heightMapModeBtn" class="term-btn toggle-sm" tabindex="0">heightmap <kbd>h</kbd></button>
           </div>
         </div>
       </section>
 
       <!-- BUILDINGS -->
-      <section class="control-card collapsed" data-panel="3" aria-label="Building placement">
+      <section class="control-card collapsed" data-panel="2" aria-label="Building placement">
         <div class="card-header" role="button" aria-expanded="false" tabindex="0">
-          <span class="header-text"><span class="collapse-icon"></span>buildings <span class="panel-num">3</span></span>
+          <span class="header-text"><span class="collapse-icon"></span>buildings <span class="panel-num">2</span></span>
         </div>
         <div class="card-body">
-          <div class="panel-empty-hint" id="stampHint">activate <strong>stamp</strong> mode to place buildings</div>
-          <div id="stampsPanel" style="display:none;">
+          <div id="stampsPanel">
             <select id="stampCategory" class="term-select" aria-label="Building category">
               <option value="">category...</option>
             </select>
@@ -84,7 +71,7 @@
               <option value="">building...</option>
             </select>
             <div class="stamp-row">
-              <button id="rotateStampBtn" class="term-btn" tabindex="0" title="Rotate stamp 60°">⟲ rotate</button>
+              <button id="rotateStampBtn" class="term-btn" tabindex="0" title="Rotate stamp 60deg">rotate</button>
               <span id="stampInfo" class="info-text"></span>
             </div>
           </div>
@@ -92,13 +79,12 @@
       </section>
 
       <!-- TERRAIN -->
-      <section class="control-card collapsed" data-panel="4" aria-label="Terraform controls">
+      <section class="control-card collapsed" data-panel="3" aria-label="Terraform controls">
         <div class="card-header" role="button" aria-expanded="false" tabindex="0">
-          <span class="header-text"><span class="collapse-icon"></span>terrain <span class="panel-num">4</span></span>
+          <span class="header-text"><span class="collapse-icon"></span>terrain <span class="panel-num">3</span></span>
         </div>
         <div class="card-body">
-          <div class="panel-empty-hint" id="terraformHint">activate <strong>terraform</strong> mode to edit elevation</div>
-          <div id="terraformPanel" style="display:none;">
+          <div id="terraformPanel">
             <div class="info-text">selected: <span id="selectedTileInfo">NONE</span></div>
             <div class="depth-row">
               <span class="depth-label">depth</span>
@@ -110,22 +96,22 @@
               <input type="number" id="baselineDepthInput" class="term-input depth-num" min="0" max="100" value="25" tabindex="0">
               <button id="applyBaselineBtn" class="term-btn" tabindex="0">apply</button>
             </div>
-            <div class="info-text muted">sea: 25 · wagon: ±2 · ox: ±5</div>
+            <div class="info-text muted">sea: 25 - wagon: +/-2 - ox: +/-5</div>
           </div>
         </div>
       </section>
 
       <!-- GRID SIZE -->
-      <section class="control-card collapsed" data-panel="5" aria-label="Grid size">
+      <section class="control-card collapsed" data-panel="4" aria-label="Grid size">
         <div class="card-header" role="button" aria-expanded="false" tabindex="0">
-          <span class="header-text"><span class="collapse-icon"></span>grid <span class="panel-num">5</span></span>
+          <span class="header-text"><span class="collapse-icon"></span>grid <span class="panel-num">4</span></span>
         </div>
         <div class="card-body">
           <div id="gridSizePanel"></div>
         </div>
       </section>
 
-      <!-- FILE OPS — pinned to bottom -->
+      <!-- FILE OPS - pinned to bottom -->
       <div class="file-ops">
         <button id="saveJsonBtn" class="term-btn" tabindex="0">save</button>
         <button id="loadJsonBtn" class="term-btn" tabindex="0">load</button>
@@ -149,11 +135,14 @@
       <span id="tileInfo">TILE: --</span>
     </div>
     <span class="status-spacer"></span>
+    <div class="status-seg">
+      <button id="show3DViewBtn" class="term-btn toggle-sm status-btn" tabindex="0">3d <kbd>v</kbd></button>
+    </div>
     <div class="status-seg status-keyhint">
       <kbd>?</kbd> keys
     </div>
     <div class="status-seg">
-      <span id="versionText">v2.1.0</span>
+      <span id="versionText">v2.2.0</span>
     </div>
   </footer>
 </div>
@@ -179,25 +168,15 @@
           on a hex grid before building them in-game. Paint terrain, place buildings with
           accurate footprints, terraform elevation, and preview everything in 3D.
         </p>
-        <div class="wt-diagram">
-          <div class="label">the interface</div>
-          <pre style="text-align:left;display:inline-block;color:var(--fg1);font-size:10px;line-height:1.6;">
-&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
-&#9474; bsp &#9474; plan name      grid &#183; tiles &#183; &#9474;  top bar
-&#9500;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9508;
-&#9474; palette  &#9474;                          &#9474;
-&#9474; modes    &#9474;       viewport           &#9474;
-&#9474; buildings&#9474;       (hex grid)         &#9474;
-&#9474; terrain  &#9474;                          &#9474;
-&#9474; file ops &#9474;                          &#9474;
-&#9500;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9508;
-&#9474; PAINT  Q: -- | R: --   TILE: --    &#9474;  status bar
-&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</pre>
-        </div>
         <p class="wt-text">
-          The left panel has collapsible sections &mdash; click a header or press
-          <kbd>1</kbd>&ndash;<kbd>5</kbd> to jump to a panel. The status bar at the bottom
-          always shows your current mode and cursor coordinates.
+          The left panel has four collapsible cards. Press <kbd>1</kbd>-<kbd>4</kbd> to jump
+          to a panel, or click any header. The active card determines your mode - opening
+          <strong>buildings</strong> enters stamp mode, opening <strong>terrain</strong> enters
+          terraform mode, and everything else is paint mode.
+        </p>
+        <p class="wt-text">
+          The status bar at the bottom shows your current mode, cursor coordinates, and
+          the <strong>3d view</strong> toggle.
         </p>
       </div>
 
@@ -214,9 +193,9 @@
           <dd>invert scroll direction</dd>
         </dl>
         <p class="wt-text">
-          The grid starts at 100&times;100 hexes. You can resize it in the
-          <span class="hl-info">grid</span> panel if you need more or less space.
-          Coordinates are shown in the status bar as axial Q, R &mdash; the same
+          The grid starts at 100x100 hexes. You can resize it in the
+          <span class="hl-info">grid</span> panel (<kbd>4</kbd>) if you need more or less space.
+          Coordinates are shown in the status bar as axial Q, R - the same
           system the game uses internally.
         </p>
         <div class="wt-tip">
@@ -229,23 +208,23 @@
         <div class="wt-page-title">painting terrain</div>
         <p class="wt-text">
           This is the default mode. Pick a color from the <span class="hl">palette</span>
-          and click or drag on the grid to paint hexes. Mark out residential areas, farms,
-          roads, districts &mdash; whatever your layout needs.
+          (<kbd>1</kbd>) and click or drag on the grid to paint hexes. Mark out residential
+          areas, farms, roads, districts - whatever your layout needs.
         </p>
         <dl class="wt-kv">
           <dt><kbd>click</kbd></dt><dd>paint a hex</dd>
           <dt><kbd>drag</kbd></dt><dd>paint an area</dd>
           <dt><kbd>+</kbd> / <kbd>-</kbd></dt><dd>brush size</dd>
           <dt><kbd>dbl-click</kbd></dt><dd>add a text label</dd>
+          <dt><kbd>ctrl+z</kbd></dt><dd>undo last action</dd>
         </dl>
         <p class="wt-text">
-          The palette has 12 presets, a <strong>custom color</strong> swatch (the rainbow one),
-          and an <strong>eraser</strong> (checkerboard) that resets hexes to default.
-          Brush size in the palette header controls how many hexes you paint at once.
+          The palette card also has <strong>boundaries</strong> and <strong>heightmap</strong>
+          toggles. These are independent overlays that work in any mode.
         </p>
         <div class="wt-tip">
-          The border/dashed swatch renders as a dashed outline &mdash; useful for marking
-          claim edges or settlement boundaries.
+          The eraser (checkerboard swatch) resets hexes to default.
+          The border swatch renders as a dashed outline for marking claim edges.
         </div>
       </div>
 
@@ -253,22 +232,22 @@
       <div class="wt-page" data-page="3">
         <div class="wt-page-title">placing buildings</div>
         <p class="wt-text">
-          Toggle <span class="hl-stamp">stamp mode</span> with the button or <kbd>x</kbd>.
-          The buildings panel opens with a category dropdown and building selector covering
-          all ~600 buildings from the game.
+          Open the <span class="hl-stamp">buildings</span> card (<kbd>x</kbd>) to enter stamp
+          mode. The building picker appears with a category dropdown covering all ~600 buildings
+          from the game.
         </p>
         <p class="wt-text">
           Select a building, then click on the grid to place it. The hover preview shows the
           <strong>exact hitbox shape</strong> from game data for accurate collision planning.
         </p>
         <dl class="wt-kv">
-          <dt><kbd>x</kbd></dt><dd>toggle stamp mode</dd>
-          <dt><kbd>q</kbd></dt><dd>rotate CCW (60&deg;)</dd>
-          <dt><kbd>e</kbd> / <kbd>r</kbd></dt><dd>rotate CW (60&deg;)</dd>
+          <dt><kbd>x</kbd></dt><dd>open buildings (stamp mode)</dd>
+          <dt><kbd>q</kbd></dt><dd>rotate CCW (60 deg)</dd>
+          <dt><kbd>e</kbd> / <kbd>r</kbd></dt><dd>rotate CW (60 deg)</dd>
         </dl>
         <div class="wt-tip">
-          Each placement is independent &mdash; place the same building multiple times.
-          Switch buildings from the dropdown without leaving stamp mode.
+          Switching to another panel automatically exits stamp mode.
+          No need to toggle anything off first.
         </div>
       </div>
 
@@ -278,14 +257,13 @@
         <p class="wt-text">Once buildings are placed, you can select, move, rotate, and delete them:</p>
         <dl class="wt-kv">
           <dt><kbd>shift+click</kbd></dt><dd>select a building (highlights yellow)</dd>
-          <dt><kbd>shift+click</kbd></dt><dd>on empty space &mdash; reposition selected building</dd>
+          <dt><kbd>shift+click</kbd></dt><dd>on empty space - reposition selected building</dd>
           <dt><kbd>q</kbd> / <kbd>e</kbd></dt><dd>rotate selected building in-place</dd>
           <dt><kbd>del</kbd></dt><dd>delete selected building</dd>
-          <dt><kbd>esc</kbd></dt><dd>deselect / cancel</dd>
+          <dt><kbd>esc</kbd></dt><dd>deselect and return to palette</dd>
         </dl>
         <div class="wt-tip">
-          The reposition preview shows the footprint at the cursor so you can see
-          exactly where it will land before committing.
+          All building operations support undo with <kbd>ctrl+z</kbd>.
         </div>
       </div>
 
@@ -293,21 +271,20 @@
       <div class="wt-page" data-page="5">
         <div class="wt-page-title">terraforming</div>
         <p class="wt-text">
-          Toggle <span class="hl-terra">terraform mode</span> with the button or <kbd>t</kbd>.
-          This mirrors the in-game elevation system &mdash; select 7-hex tile clusters and set
-          their depth (0&ndash;100). Boundary lines appear automatically.
+          Open the <span class="hl-terra">terrain</span> card (<kbd>t</kbd>) to enter terraform
+          mode. Boundary lines appear automatically so you can see the 7-hex tile clusters.
+          Click clusters to select them, then use the depth slider (0-100).
         </p>
         <dl class="wt-kv">
-          <dt><kbd>t</kbd></dt><dd>toggle terraform mode</dd>
+          <dt><kbd>t</kbd></dt><dd>open terrain (terraform mode)</dd>
           <dt><kbd>click</kbd></dt><dd>select a tile cluster</dd>
           <dt><kbd>ctrl+click</kbd></dt><dd>multi-select tiles</dd>
-          <dt><kbd>esc</kbd></dt><dd>clear selection</dd>
+          <dt><kbd>esc</kbd></dt><dd>clear selection and return to palette</dd>
         </dl>
         <p class="wt-text">
-          Use the <strong>depth slider</strong> in the terrain panel to set elevation for all
-          selected tiles. The <strong>baseline depth</strong> sets a default for new tiles.
+          The <strong>baseline depth</strong> button sets a default for all tiles at once.
           <strong>Spacer tiles</strong> between clusters inherit depth from neighbors via
-          majority-vote &mdash; just like in-game.
+          majority-vote - just like in-game.
         </p>
         <div class="wt-tip">
           Terraforming is optional. If you just want a flat layout with buildings, skip it.
@@ -318,11 +295,12 @@
       <div class="wt-page" data-page="6">
         <div class="wt-page-title">3d visualization</div>
         <p class="wt-text">
-          Press <kbd>3</kbd> or click <strong>3d view</strong> to switch to perspective rendering.
-          Terrain extrudes based on depth values, and buildings render as colored prisms.
+          Press <kbd>v</kbd> or click <strong>3d</strong> in the status bar to switch to
+          perspective rendering. Terrain extrudes based on depth values, and buildings
+          render as colored prisms.
         </p>
         <dl class="wt-kv">
-          <dt><kbd>3</kbd></dt><dd>toggle 3D view</dd>
+          <dt><kbd>v</kbd></dt><dd>toggle 3D view</dd>
           <dt><kbd>left-drag</kbd></dt><dd>orbit camera</dd>
           <dt><kbd>scroll</kbd></dt><dd>zoom</dd>
           <dt><kbd>h</kbd></dt><dd>toggle heightmap colors</dd>
@@ -338,20 +316,20 @@
         <div class="wt-page-title">saving &amp; loading</div>
         <p class="wt-text">
           Plans save as <strong>JSON files</strong> to your computer. Nothing is stored on a
-          server &mdash; your plans are entirely local.
+          server - your plans are entirely local.
         </p>
         <dl class="wt-kv">
           <dt>save</dt><dd>downloads current plan as .json</dd>
           <dt>load</dt><dd>opens a file picker to load a saved plan</dd>
-          <dt>reset</dt><dd>clears everything (no undo!)</dd>
+          <dt>reset</dt><dd>clears everything (with confirmation)</dd>
         </dl>
         <p class="wt-text">
           The plan name in the top bar sets the filename. Plans include all painted hexes,
           buildings with rotation, depth values, and labels. Share .json files with other
-          players &mdash; they just load them into their own BSP.
+          players - they just load them into their own BSP.
         </p>
         <div class="wt-tip">
-          Save often. No auto-save and no undo yet.
+          <kbd>ctrl+z</kbd> undoes the last 100 actions. Save and reset clear the undo stack.
         </div>
       </div>
 
@@ -365,11 +343,12 @@
           <dt><kbd>middle-drag</kbd></dt><dd>pan view</dd>
           <dt><kbd>scroll</kbd></dt><dd>zoom</dd>
           <dt><kbd>dbl-click</kbd></dt><dd>add text label</dd>
+          <dt><kbd>ctrl+z</kbd></dt><dd>undo</dd>
         </dl>
         <dl class="wt-kv" style="margin-bottom:6px;">
-          <dt><kbd>x</kbd></dt><dd>stamp mode</dd>
-          <dt><kbd>t</kbd></dt><dd>terraform mode</dd>
-          <dt><kbd>3</kbd></dt><dd>3d view</dd>
+          <dt><kbd>x</kbd></dt><dd>buildings (stamp mode)</dd>
+          <dt><kbd>t</kbd></dt><dd>terrain (terraform mode)</dd>
+          <dt><kbd>v</kbd></dt><dd>3d view</dd>
           <dt><kbd>b</kbd></dt><dd>boundaries</dd>
           <dt><kbd>h</kbd></dt><dd>heightmap</dd>
           <dt><kbd>i</kbd></dt><dd>invert zoom</dd>
@@ -380,11 +359,11 @@
           <dt><kbd>shift+click</kbd></dt><dd>select / reposition building</dd>
           <dt><kbd>del</kbd></dt><dd>delete selected</dd>
           <dt><kbd>ctrl+click</kbd></dt><dd>multi-select tiles</dd>
-          <dt><kbd>esc</kbd></dt><dd>deselect / exit mode</dd>
+          <dt><kbd>esc</kbd></dt><dd>deselect / return to palette</dd>
         </dl>
         <dl class="wt-kv">
           <dt><kbd>+</kbd> / <kbd>-</kbd></dt><dd>brush size</dd>
-          <dt><kbd>1</kbd>&ndash;<kbd>5</kbd></dt><dd>focus panel</dd>
+          <dt><kbd>1</kbd>-<kbd>4</kbd></dt><dd>focus panel</dd>
           <dt><kbd>?</kbd></dt><dd>this guide</dd>
         </dl>
       </div>
@@ -403,44 +382,20 @@
 <script type="module" src="./js/main.js"></script>
 <script type="module" src="./js/ui/walkthrough.js"></script>
 
-<!-- UI adapter — hint visibility + keyboard panel shortcuts
+<!-- UI adapter - keyboard panel shortcuts + mode-from-card activation
      Zero coupling to main.js: observes DOM mutations -->
 <script>
 (function() {
-  // Auto-hide empty-state hints when their sibling panel becomes visible
-  const pairs = [
-    ['stampHint', 'stampsPanel'],
-    ['terraformHint', 'terraformPanel'],
-  ];
-
-  for (const [hintId, panelId] of pairs) {
-    const hint = document.getElementById(hintId);
-    const panel = document.getElementById(panelId);
-    if (!hint || !panel) continue;
-
-    const sync = () => {
-      const visible = panel.style.display !== 'none' && panel.style.display !== '';
-      hint.style.display = visible ? 'none' : '';
-    };
-
-    // Observe style changes (main.js sets display directly)
-    new MutationObserver(sync).observe(panel, {
-      attributes: true,
-      attributeFilter: ['style'],
-    });
-
-    sync();
-  }
-
-  // Panel number shortcuts (1-5) — expand the matching accordion card
-  // Mode shortcuts (s, t, b, 3, h) — click the matching button
+  // Panel number shortcuts (1-4) - expand the matching accordion card
+  // Mode shortcuts (b, h, v) - click the matching toggle button
+  // Card shortcuts (x, t) - open the corresponding card
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, textarea, select')) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
 
-    // Panel focus: 1-5
+    // Panel focus: 1-4
     const num = parseInt(e.key);
-    if (num >= 1 && num <= 5) {
+    if (num >= 1 && num <= 4) {
       const card = document.querySelector(`[data-panel="${num}"]`);
       if (card) {
         e.preventDefault();
@@ -450,22 +405,31 @@
       return;
     }
 
-    // Mode shortcuts
-    const modeMap = {
-      'x': 'stampModeBtn',
-      't': 'terraformModeBtn',
+    // Card shortcuts - open the card (which triggers mode entry via accordion)
+    if (e.key === 'x' || e.key === 'X') {
+      e.preventDefault();
+      const card = document.querySelector('[data-panel="2"]');
+      if (card) card.querySelector('.card-header')?.click();
+      return;
+    }
+    if (e.key === 't' || e.key === 'T') {
+      e.preventDefault();
+      const card = document.querySelector('[data-panel="3"]');
+      if (card) card.querySelector('.card-header')?.click();
+      return;
+    }
+
+    // Toggle shortcuts - click the button directly
+    const toggleMap = {
       'b': 'showBoundariesBtn',
       'v': 'show3DViewBtn',
       'h': 'heightMapModeBtn',
     };
 
-    const btnId = modeMap[e.key.toLowerCase()];
+    const btnId = toggleMap[e.key.toLowerCase()];
     if (btnId) {
-      const btn = document.getElementById(btnId);
-      if (btn) {
-        e.preventDefault();
-        btn.click();
-      }
+      e.preventDefault();
+      document.getElementById(btnId)?.click();
     }
   });
 })();
