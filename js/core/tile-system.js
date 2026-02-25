@@ -257,4 +257,25 @@ export default class TileSystem {
       if (tile) tile.depth = depth;
     }
   }
+
+
+  // Rebuild the tile lattice for new bounds, preserving depths
+  // for tiles that still exist in the new set. Tiles that fall
+  // outside the new bounds are silently dropped. New tiles get
+  // the default depth (25).
+  regenerate(bounds) {
+    const savedDepths = new Map();
+    for (const [key, tile] of this.tiles) {
+      if (tile.depth !== 25) savedDepths.set(key, tile.depth);
+    }
+
+    this.generate(bounds);
+
+    for (const [key, depth] of savedDepths) {
+      const tile = this.tiles.get(key);
+      if (tile) tile.depth = depth;
+    }
+
+    return this;
+  }
 }

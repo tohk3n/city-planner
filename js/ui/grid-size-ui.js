@@ -30,9 +30,10 @@ const CLAIM_TIERS = [
 ];
 
 export default class GridSizeUI {
-  constructor(container, onResize) {
+  constructor(container, onResize, onCheckLosses) {
     this.container = container;
     this.onResize = onResize;
+    this.onCheckLosses = onCheckLosses || null;
 
     // Default: Tier 5 (~5k tiles)
     this.tierIndex = 4;
@@ -207,16 +208,51 @@ export default class GridSizeUI {
     const r = tier.radius;
     const bounds = { minQ: -r, maxQ: r, minR: -r, maxR: r };
     this._showStats(bounds, tier.tiles);
-    if (this.onResize) this.onResize(bounds);
+    this._confirmAndResize(bounds);
   }
 
   _applyAdvanced() {
     const bounds = this._advancedBounds();
     const tileCount = countTileHexes(bounds);
     this._showStats(bounds, tileCount);
-    if (this.onResize) this.onResize(bounds);
+    this._confirmAndResize(bounds);
   }
 
+  // Check for data loss and confirm with user before committing.
+  // Expansions always proceed immediately. Reductions that would
+  // destroy work show a summary and require explicit confirmation.
+  _confirmAndResize(bounds) {
+    const losses = this.onCheckLosses?.(bounds);
+
+    if (!losses) {
+      if (this.onResize) this.onResize(bounds);
+      return;
+    }
+
+    // Build a readable summary of what would be lost
+    const parts = [];
+    if (losses.paintedHexes > 0) {
+      parts.push(`${losses.paintedHexes} painted hex${losses.paintedHexes > 1 ? 'es' : ''}`);
+    }
+    if (losses.buildings.length > 0) {
+      parts.push(`${losses.buildings.length} building${losses.buildings.length > 1 ? 's' : ''}`);
+    }
+    if (losses.terraformedTiles > 0) {
+      parts.push(`${losses.terraformedTiles} terraformed tile${losses.terraformedTiles > 1 ? 's' : ''}`);
+    }
+    if (losses.labelCount > 0) {
+      parts.push(`${losses.labelCount} label${losses.labelCount > 1 ? 's' : ''}`);
+    }
+
+    const msg = `Shrinking the grid will remove:\n\n` +
+                `  ${parts.join(', ')}\n\n` +
+                `This cannot be undone. Continue?`;
+
+    if (confirm(msg)) {
+      if (this.onResize) this.onResize(bounds);
+    }
+  }
+  
   _advancedBounds() {
     if (this._advMode === 'radius') {
       const r = this._advRadius;
