@@ -235,10 +235,18 @@ function wireGridSizeUI() {
   const panel = document.getElementById('gridSizePanel');
   if (!panel) return;
 
-  const ui = new GridSizeUI(panel, (bounds) => {
-    app.resizeGrid(bounds.minQ, bounds.maxQ, bounds.minR, bounds.maxR);
-    updateStats();
-  });
+  const ui = new GridSizeUI(
+    panel,
+    // onResize - commit the change
+    (bounds) => {
+      app.resizeGrid(bounds.minQ, bounds.maxQ, bounds.minR, bounds.maxR);
+      updateStats();
+    },
+    // onCheckLosses - preview what would be destroyed
+    (bounds) => {
+      return app.computeResizeLosses(bounds.minQ, bounds.maxQ, bounds.minR, bounds.maxR);
+    }
+  );
 
   ui.setBounds(app.bounds);
 }

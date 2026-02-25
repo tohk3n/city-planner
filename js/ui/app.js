@@ -124,9 +124,26 @@ export default class App {
   // --- Grid Size (user-configurable) ---
 
   resizeGrid(minQ, maxQ, minR, maxR) {
+    // --- Remove buildings that would be clipped by new bounds ---
+    // Do this BEFORE setBounds so we can clean up grid assignments properly
+    const newBounds = rectBounds(minQ, maxQ, minR, maxR);
+    this._pruneOrphanedBuildings(newBounds);
+
+    // --- Update App-level bounds (used by center offset, zoom, save, etc) ---
     this.bounds = { minQ, maxQ, minR, maxR };
-    this.grid.setBounds(rectBounds(minQ, maxQ, minR, maxR));
-    this.tiles.generate(this.bounds);
+
+    // --- Resize hex grid (preserves in-bounds hex data) ---
+    this.grid.setBounds(newBounds);
+
+    // --- Rebuild tile lattice, preserving terraform depths ---
+    this.tiles.regenerate(this.bounds);
+
+    // --- Undo stack references hexes/tiles that may no longer exist ---
+    undo.clear();
+
+    // --- Clear tile selection (selected tiles may be gone) ---
+    this.selectedTileKeys.clear();
+
     this._markSpacers();
 
     const centerPx = this._computeCenterOffset();
@@ -137,11 +154,8 @@ export default class App {
     this.labels.refreshPositions();
 
     this.hexGrid.rebuild(this.grid);
-
-    // Fit the camera to the new grid extents
     this._zoomToFit();
 
-    // Only rebuild 3D stuff if we're in 3D
     if (this.show3D) {
       this._rebuildTerrain();
       this._rebuildBuildings();
@@ -155,6 +169,52 @@ export default class App {
 
     this._emit('gridResize', this.bounds);
   }
+
+  // Compute what would be lost if bounds shrink to newBounds.
+  // Returns null if nothing would be lost (pure expansion).
+  // Cheap to call - no mutations, just iteration.
+  computeResizeLosses(minQ, maxQ, minR, maxR) {
+    const newBounds = rectBounds(minQ, maxQ, minR, maxR);
+
+    let paintedHexes = 0;
+    let labelCount = 0;
+    const lostBuildings = [];
+
+    // Hex-level losses: painted hexes and labels outside new bounds
+    this.grid.forEach((hex) => {
+      if (this.grid._checkBounds(hex.q, hex.r, newBounds)) return;
+      if (!hex.isDefault) paintedHexes++;
+      if (hex.text) labelCount++;
+    });
+
+    // Buildings with any hex outside new bounds get removed entirely
+    // (partial buildings are broken, so we treat them as total losses)
+    for (const [id, placement] of this.buildings) {
+      const clipped = placement.hexes.some(
+        h => !this.grid._checkBounds(h.q, h.r, newBounds)
+      );
+      if (clipped) lostBuildings.push(placement);
+    }
+
+    // Tile depths that would be lost (tiles outside new lattice range).
+    // We can't cheaply know which tile keys survive without regenerating,
+    // but we can check if the tile center is roughly within new bounds.
+    let terraformedTiles = 0;
+    for (const tile of this.tiles.tiles.values()) {
+      if (tile.depth === 25) continue;
+      // Tile center outside new rect means it probably won't survive
+      if (tile.q < minQ - 1 || tile.q > maxQ + 1 ||
+          tile.r < minR - 1 || tile.r > maxR + 1) {
+        terraformedTiles++;
+      }
+    }
+
+    const hasLoss = paintedHexes > 0 || lostBuildings.length > 0 ||
+                    terraformedTiles > 0 || labelCount > 0;
+
+    return hasLoss ? { paintedHexes, buildings: lostBuildings, terraformedTiles, labelCount } : null;
+  }
+
 
   // Convenience: set by radius (hex-shaped grid centered at origin)
   resizeGridByRadius(radius) {
@@ -175,6 +235,29 @@ export default class App {
       tileCount: this.tiles.tiles.size,
       buildingCount: this.buildings.size,
     };
+  }
+
+  // Remove buildings that have any hex outside the given bounds.
+  // Partial buildings are invalid so we remove them entirely.
+  _pruneOrphanedBuildings(newBounds) {
+    const toRemove = [];
+    for (const [id, placement] of this.buildings) {
+      const clipped = placement.hexes.some(
+        h => !this.grid._checkBounds(h.q, h.r, newBounds)
+      );
+      if (clipped) toRemove.push(id);
+    }
+
+    for (const id of toRemove) {
+      const placement = this.buildings.get(id);
+      if (!placement) continue;
+      // Clear grid hex assignments while hexes still exist
+      for (const hex of placement.hexes) {
+        this.grid.clearBuilding(hex.q, hex.r);
+      }
+      this.buildings.delete(id);
+      this.buildingRenderer.remove(id);
+    }
   }
 
   // --- Paint ---
