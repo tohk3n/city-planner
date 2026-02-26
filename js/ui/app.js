@@ -104,6 +104,7 @@ export default class App {
 
     // Input — InteractionManager reads renderer.domElement from sceneManager
     this.interaction = new InteractionManager(this.scene, HEX_SIZE);
+    this.interaction.setOffset(centerPx.x, centerPx.z);
     this.camera = new CameraController(this.scene);
 
     // Wire interaction callbacks (names match InteractionManager's API)
@@ -151,6 +152,7 @@ export default class App {
     this.buildingRenderer.setOffset(centerPx.x, centerPx.z);
     this.labels.setOffset(centerPx.x, centerPx.z);
     this.hoverPreview.setOffset(centerPx.x, centerPx.z);
+    this.interaction.setOffset(centerPx.x, centerPx.z);
     this.labels.refreshPositions();
 
     this.hexGrid.rebuild(this.grid);
@@ -862,6 +864,13 @@ export default class App {
     if (!this.grid.hasChanges) return;
     const changes = this.grid.consumeChanges();
     this.hexGrid.applyChanges(this.grid, changes);
+
+    // Keep 3D terrain colors in sync when painting while in 3D view.
+    // recolor() just swaps cached materials on existing meshes - no
+    // geometry allocation, so it's cheap enough to call per paint stroke.
+    if (this.show3D && this.terrain.tileGroups.size > 0) {
+      this.terrain.recolor(this.tiles, (q, r) => this._getColor(q, r), this.heightMapMode);
+    }
   }
 
   // Flag spacer-cluster hexes so the renderer gives them a darker shade.

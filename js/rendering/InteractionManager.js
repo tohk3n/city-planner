@@ -33,6 +33,12 @@ export default class InteractionManager {
     // The element we listen on — the WebGL canvas
     this._el = sceneManager.renderer.domElement;
 
+    // World offset applied to all renderers. Must match so we can
+    // convert world coords (which have the offset baked in) back
+    // to raw pixel coords for pixelToAxial.
+    this._offsetX = 0;
+    this._offsetZ = 0;
+
     // State
     this._dragging = false;
     this._lastHexKey = null;   // avoid repeat-firing on same hex
@@ -61,6 +67,14 @@ export default class InteractionManager {
     this._el.addEventListener('contextmenu', this._onContextMenu);
   }
 
+  // Must be called with the same offset as all renderers so picking
+  // agrees with what's on screen. World coords have the offset
+  // subtracted; we add it back to get raw pixel coords for pixelToAxial.
+  setOffset(x, z) {
+    this._offsetX = x;
+    this._offsetZ = z;
+  }
+
   // Convert screen pixel to axial hex. Returns { q, r } or null
   // if the pointer isn't over the ground plane (e.g. perspective
   // camera looking at the sky).
@@ -75,9 +89,10 @@ export default class InteractionManager {
     const world = this._ndcToWorld(_ndc, camera);
     if (!world) return null;
 
-    // world.x maps to pixel-x, world.z maps to pixel-y
-    // (hex math uses a 2D plane; Three.js uses XZ as ground)
-    return pixelToAxial(world.x, world.z, this.hexSize);
+    // Renderers position hexes at (pixelPos - offset), so world coords
+    // are in offset-adjusted space. Add offset back to get raw pixel
+    // coords that pixelToAxial expects.
+    return pixelToAxial(world.x + this._offsetX, world.z + this._offsetZ, this.hexSize);
   }
 
   dispose() {
